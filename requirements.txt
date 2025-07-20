@@ -1,0 +1,7 @@
+#возможно нужно установить пакет sudo apt install python3-opencv
+sounddevice
+onnxruntime
+scipy
+faster_whisper
+keyboard
+pystray
