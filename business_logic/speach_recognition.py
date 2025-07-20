@@ -9,8 +9,8 @@ import time
 from collections import deque
 from scipy import signal
 from faster_whisper import WhisperModel
-import keyboard
 import argparse
+from business_logic.hot_key_handler import HotkeyHandler
 
 
 logger = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ class SpeechRecognizer:
                 "beam_size": 5
             }
 
-        print("Модель распознавания загружена!")
+        logger.info("Модель распознавания загружена!")
 
     def transcribe_audio(self, audio_data):
         """
@@ -104,7 +104,7 @@ class SpeechRecognizer:
             return full_text, detected_language, confidence
 
         except Exception as e:
-            print(f"Ошибка распознавания: {e}")
+            logger.error(f"Ошибка распознавания: {e}")
             return "", "unknown", 0.0
 
 
@@ -114,7 +114,7 @@ class RealTimeASR:
                  block_size=1024,
                  whisper_model="small",
                  language="ru",
-                 hotkey="ctrl+space"):
+                 hotkey="<ctrl>+<space>"):
         """
         Инициализация системы распознавания речи
 
@@ -131,10 +131,12 @@ class RealTimeASR:
         self.running = False
         self.hotkey = hotkey
 
+        self.hotkey_handler = HotkeyHandler()
+
         # Определяем поддерживаемую частоту устройства
         self.device_sample_rate = self.find_supported_sample_rate()
-        print(f"Устройство поддерживает: {self.device_sample_rate} Hz")
-        print(f"Модель требует: {self.target_sample_rate} Hz")
+        logger.info(f"Устройство поддерживает: {self.device_sample_rate} Hz")
+        logger.info(f"Модель требует: {self.target_sample_rate} Hz")
 
         # Инициализируем распознаватель речи
         self.speech_recognizer = SpeechRecognizer(
@@ -157,7 +159,7 @@ class RealTimeASR:
         if self.device_sample_rate != self.target_sample_rate:
             self.need_resample = True
             self.resample_ratio = self.target_sample_rate / self.device_sample_rate
-            print(f"Будем ресэмплировать с {self.device_sample_rate} Hz до {self.target_sample_rate} Hz")
+            logger.warning(f"Будем ресэмплировать с {self.device_sample_rate} Hz до {self.target_sample_rate} Hz")
         else:
             self.need_resample = False
 
@@ -170,28 +172,34 @@ class RealTimeASR:
 
     def setup_hotkeys(self):
         """Настройка горячих клавиш для ручного режима"""
+        logger.info(f"setup_hotkeys")
         try:
-            keyboard.on_press_key(self.hotkey, self.on_hotkey_press, suppress=False)
-            keyboard.on_release_key(self.hotkey, self.on_hotkey_release, suppress=False)
-            print(f"Горячие клавиши настроены: {self.hotkey}")
+            self.hotkey_handler.add_hotkey(
+                hotkey=self.hotkey,
+                on_press_callback=self.on_hotkey_press,
+                on_release_callback=self.on_hotkey_release
+            )
+            # keyboard.on_press_key(self.hotkey, self.on_hotkey_press, suppress=False)
+            # keyboard.on_release_key(self.hotkey, self.on_hotkey_release, suppress=False)
+            logger.info(f"Горячие клавиши настроены: {self.hotkey}")
         except Exception as e:
-            print(f"Ошибка настройки горячих клавиш: {e}")
-            print("Попробуйте запустить с правами администратора или используйте автоматический режим")
+            logger.error(f"Ошибка настройки горячих клавиш: {e}")
+            logger.error("Попробуйте запустить с правами администратора или используйте автоматический режим")
 
-    def on_hotkey_press(self, event):
+    def on_hotkey_press(self, *args, **kwargs):
         """Обработка нажатия горячей клавиши"""
         if not self.manual_recording:
             self.manual_recording = True
             self.manual_start_time = time.time()
             self.speech_buffer = []
-            print(f"🎤 РУЧНАЯ ЗАПИСЬ НАЧАЛАСЬ (нажата {self.hotkey})")
+            logger.info(f"🎤 РУЧНАЯ ЗАПИСЬ НАЧАЛАСЬ (нажата {self.hotkey})")
 
-    def on_hotkey_release(self, event):
+    def on_hotkey_release(self, *args, **kwargs):
         """Обработка отпускания горячей клавиши"""
         if self.manual_recording:
             self.manual_recording = False
             duration = time.time() - self.manual_start_time if self.manual_start_time else 0
-            print(f"🔇 РУЧНАЯ ЗАПИСЬ ОСТАНОВЛЕНА (отпущена {self.hotkey}, длительность: {duration:.1f}с)")
+            logger.info(f"🔇 РУЧНАЯ ЗАПИСЬ ОСТАНОВЛЕНА (отпущена {self.hotkey}, длительность: {duration:.1f}с)")
 
             # Запускаем распознавание в отдельном потоке
             if len(self.speech_buffer) > 0:
@@ -208,9 +216,9 @@ class RealTimeASR:
         try:
             default_device = sd.default.device[0]
             device_info = sd.query_devices(default_device)
-            print(f"Используем устройство: {device_info['name']}")
+            logger.info(f"Используем устройство: {device_info['name']}")
         except:
-            print("Используем устройство по умолчанию")
+            logger.info("Используем устройство по умолчанию")
             default_device = None
 
         for sr in sample_rates:
@@ -250,10 +258,10 @@ class RealTimeASR:
     def process_speech_segment(self):
         """Обработка накопленного речевого сегмента"""
         if len(self.speech_buffer) < self.min_speech_length:
-            print("Сегмент слишком короткий для распознавания")
+            logger.warning("Сегмент слишком короткий для распознавания")
             return
 
-        print(f"Распознаем речевой сегмент ({len(self.speech_buffer) / self.target_sample_rate:.1f}s)...")
+        logger.info(f"Распознаем речевой сегмент ({len(self.speech_buffer) / self.target_sample_rate:.1f}s)...")
 
         # Конвертируем в numpy array
         speech_array = np.array(self.speech_buffer, dtype=np.float32)
@@ -262,16 +270,14 @@ class RealTimeASR:
         text, language, confidence = self.speech_recognizer.transcribe_audio(speech_array)
 
         if text:
-            print(f"\n{'=' * 60}")
-            print(f"🎯 РАСПОЗНАНО [{language.upper()}, уверенность: {confidence:.2f}]:")
-            print(f"   {text}")
-            print(f"{'=' * 60}\n")
+            logger.info(f"🎯 РАСПОЗНАНО [{language.upper()}, уверенность: {confidence:.2f}]:")
+            logger.info(f"{text}")
         else:
-            print("Речь не распознана или содержит только шум\n")
+            logger.warning("Речь не распознана или содержит только шум\n")
 
     def process_audio(self):
         """Обработка аудио в отдельном потоке"""
-        print("Начинаем обработку аудио...")
+        logger.info("Начинаем обработку аудио...")
 
         while self.running:
             try:
@@ -293,18 +299,18 @@ class RealTimeASR:
                             self.speech_buffer = self.speech_buffer[-self.max_speech_length:]
 
                         # Показываем статус записи
-                        duration = len(self.speech_buffer) / self.target_sample_rate
-                        print(f"🎙️  ЗАПИСЬ... {duration:.1f}s (удерживайте {self.hotkey})", end="\r")
+                        # duration = len(self.speech_buffer) / self.target_sample_rate
+                        # logger.info(f"🎙️  ЗАПИСЬ... {duration:.1f}s (удерживайте {self.hotkey})")
 
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"Ошибка обработки: {e}")
+                logger.error(f"Ошибка обработки: {e}")
 
     def audio_callback(self, indata, frames, time, status):
         """Callback для sounddevice"""
         if status:
-            print(f"Аудио статус: {status}")
+            logger.info(f"Аудио статус: {status}")
 
         if len(indata.shape) > 1:
             audio_data = indata[:, 0]
@@ -321,15 +327,7 @@ class RealTimeASR:
         processing_thread.daemon = True
         processing_thread.start()
 
-        print(f"Начинаем запись с микрофона (устройство: {self.device_sample_rate} Hz → модель: {self.target_sample_rate} Hz)")
-        print("Нажмите Ctrl+C для остановки\n")
-
-
-        print(f"📋 ИНСТРУКЦИЯ:")
-        print(f"   • Нажмите и удерживайте {self.hotkey} во время говорения")
-        print(f"   • Отпустите {self.hotkey} чтобы запустить распознавание")
-        print(f"   • Речь будет распознана автоматически после отпускания клавиши\n")
-
+        logger.info(f"Начинаем запись с микрофона (устройство: {self.device_sample_rate} Hz → модель: {self.target_sample_rate} Hz)")
 
         try:
             with sd.InputStream(
@@ -343,22 +341,23 @@ class RealTimeASR:
                     time.sleep(0.1)
 
         except KeyboardInterrupt:
-            print("\nОстанавливаем запись...")
+            logger.info("\nОстанавливаем запись...")
         finally:
             self.stop()
 
     def stop(self):
         """Остановка записи и обработки"""
         self.running = False
-        try:
-            keyboard.unhook_all()
-        except:
-            pass
-        print("Запись остановлена")
+        # try:
+        #     keyboard.unhook_all()
+        # except:
+        #     pass
+        logger.info("Запись остановлена")
 
 
 def main():
     """Основная функция с поддержкой аргументов командной строки"""
+    import core.config
     parser = argparse.ArgumentParser(
         description="Real-time Voice Activity Detection + Speech Recognition",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -428,6 +427,12 @@ def main():
             hotkey=args.hotkey
         )
         vad_asr.start()
+        print("Нажмите Ctrl+C для остановки\n")
+
+        print(f"📋 ИНСТРУКЦИЯ:")
+        print(f"   • Нажмите и удерживайте {args.hotkey} во время говорения")
+        print(f"   • Отпустите {args.hotkey} чтобы запустить распознавание")
+        print(f"   • Речь будет распознана автоматически после отпускания клавиши\n")
     except Exception as e:
         print(f"Ошибка: {e}")
         if "keyboard" in str(e):
