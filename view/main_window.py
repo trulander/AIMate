@@ -1,7 +1,5 @@
-import threading
 import tkinter as tk
-from time import sleep
-from tkinter import Toplevel, ttk
+from tkinter import ttk
 import logging
 from PIL import Image, ImageTk
 import pystray
@@ -9,21 +7,23 @@ from chlorophyll import CodeView
 from pygments import lexers
 
 from business_logic.orchestration import Orchestration
+from entities.lexers import Lexers
 from view.main_menu import MainMenu
 from view.selection_window import SelectionWindow
+from view.status_bar import StatusBar
 
 logger = logging.getLogger(__name__)
 
 
-LEXERS = {
-    "text": lexers.TextLexer,
-    "python": lexers.PythonLexer,
-    "javascript": lexers.JavascriptLexer,
-    "html": lexers.HtmlLexer,
-    "bash": lexers.BashLexer,
-    "json": lexers.JsonLexer,
-    "css": lexers.CssLexer,
-}
+# LEXERS = {
+#     "text": lexers.TextLexer,
+#     "python": lexers.PythonLexer,
+#     "javascript": lexers.JavascriptLexer,
+#     "html": lexers.HtmlLexer,
+#     "bash": lexers.BashLexer,
+#     "json": lexers.JsonLexer,
+#     "css": lexers.CssLexer,
+# }
 
 
 class MainWindow(tk.Tk):
@@ -32,7 +32,7 @@ class MainWindow(tk.Tk):
         self.orchestrator = orchestrator
         self.title("Main Window")
         self.geometry("1045x642+1036+533")
-        self.minsize(800, 800)
+        self.minsize(800, 1000)
         self.selection_rect = None
         self.start_position = None
         self.selection_window = None
@@ -41,26 +41,26 @@ class MainWindow(tk.Tk):
         self.configure(background="white")
         self.configure(highlightbackground="white")
         self.configure(highlightcolor="black")
+
         MainMenu(self)
+
+        # Основной контент
+        main_frame = tk.Frame(self, bg="white")
+        main_frame.pack(fill="both", expand=True)
 
         self.editor = None
         self.input_editor = None
 
         # === Левая панель: список чатов ===
-        self.chat_listbox = tk.Listbox(self)
+        self.chat_listbox = tk.Listbox(main_frame)
         self.chat_listbox.place(relx=0.01, rely=0.02, relwidth=0.22, relheight=0.96)
         self.chat_listbox.bind("<<ListboxSelect>>", self.select_chat)
 
-        self.chat_sessions = {
-            "Chat 1": "print('Hello from Chat 1')",
-            "Chat 2": "<h1>Hello from Chat 2</h1>",
-            "Chat 3": "echo Hello from Chat 3",
-        }
-        for name in self.chat_sessions:
-            self.chat_listbox.insert(tk.END, name)
+        self.update_chat_listbox()
+
 
         # === Правая панель ===
-        self.right_frame = tk.Frame(self, bg="white")
+        self.right_frame = tk.Frame(main_frame, bg="white")
         self.right_frame.place(relx=0.24, rely=0.02, relwidth=0.74, relheight=0.96)
 
         # Метка для AI-ответа
@@ -68,31 +68,27 @@ class MainWindow(tk.Tk):
         lbl.pack(anchor="nw", padx=10, pady=5)
 
         # Выбор языка
-        self.lang_var = tk.StringVar(value="python")
-        self.lang_combo = ttk.Combobox(self.right_frame, values=list(LEXERS.keys()),
-                                       textvariable=self.lang_var, state='readonly')
-        self.lang_combo.pack(anchor="nw", padx=10, pady=(0, 5))
-        self.lang_combo.bind("<<ComboboxSelected>>", self.change_language)
+        self.default_lexer = Lexers.python.value
 
         # === Контейнеры для редакторов ===
-        self.editor_frame = tk.Frame(self.right_frame, bg="white")
+        self.editor_frame = tk.Frame(self.right_frame, bg="white", height=1)
         self.editor_frame.pack(fill="both", expand=True, padx=10, pady=(5, 5))
 
-        self.create_editor(self.editor_frame, "editor", initial_text="", height=None)
+        self.create_editor(self.editor_frame, "editor", initial_text="", height=1)
 
         # Метка и поле ввода пользователя
         input_lbl = tk.Label(self.right_frame, text="Ваш запрос:", bg="white", anchor="w")
         input_lbl.pack(anchor="nw", padx=10, pady=(10, 0))
 
-        self.input_frame = tk.Frame(self.right_frame, bg="white")
+        self.input_frame = tk.Frame(self.right_frame, bg="white", height=1)
         self.input_frame.pack(fill="x", padx=10, pady=(0, 5))
 
-        self.create_editor(self.input_frame, "input_editor", initial_text="", height=7)
+        self.create_editor(self.input_frame, "input_editor", initial_text="", height=1)
 
         # Кнопка отправки
         self.send_button = tk.Button(self.right_frame, text="Отправить", command=self.send_message)
         self.send_button.pack(anchor="e", padx=10, pady=(0, 10))
-
+        StatusBar(self)
         # btn = tk.Button(self, text="Mark Area", command=self.mark_area)
         # btn.pack(pady=20)
         #
@@ -102,7 +98,13 @@ class MainWindow(tk.Tk):
         # self.label = tk.Label(self)
         # self.label.pack()
 
-    def create_editor(self, container, attr_name, initial_text="", height=None, expand: bool = True):
+    def update_chat_listbox(self):
+        self.chat_listbox.delete(0, tk.END)  # Очищает список
+        self.chat_sessions = self.orchestrator.get_chat_list()
+        for name in self.chat_sessions:
+            self.chat_listbox.insert(tk.END, name)
+
+    def create_editor(self, container, attr_name, initial_text="", height=10, expand: bool = True):
         # Удалить старый, если есть
         old = getattr(self, attr_name, None)
         if old:
@@ -111,9 +113,8 @@ class MainWindow(tk.Tk):
         else:
             current_text = ""
 
-        lexer_cls = LEXERS.get(self.lang_var.get())
         editor = CodeView(container,
-                          lexer=lexer_cls,
+                          lexer=self.default_lexer,
                           color_scheme="monokai",
                           autohide_scrollbar=False,
                           background="white",
@@ -124,6 +125,8 @@ class MainWindow(tk.Tk):
         setattr(self, attr_name, editor)
 
     def change_language(self, event=None):
+        logger.info(f"change_language: {event}")
+        self.default_lexer = Lexers[event].value
         out_text = self.editor.get("1.0", tk.END)
         in_text = self.input_editor.get("1.0", tk.END)
         self.create_editor(self.editor_frame, "editor", initial_text=out_text, height=None)
@@ -140,6 +143,7 @@ class MainWindow(tk.Tk):
     def send_message(self):
         text = self.input_editor.get("1.0", tk.END).strip()
         print("Отправка запроса:", text)
+        self.orchestrator.send_message(message=text)
         # result = ai_model.generate(text)
         # self.create_editor(self.editor_frame, "editor", initial_text=result, height=15)
 

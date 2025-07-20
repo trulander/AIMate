@@ -38,3 +38,13 @@ class Orchestration:
         cv2.namedWindow("test", cv2.WINDOW_NORMAL)
         cv2.imshow("test", frame)
         cv2.waitKey(1)
+
+    def send_message(self, message: str):
+        pass
+
+    def get_chat_list(self) -> dict:
+        return {
+            "Chat 1": "print('Hello from Chat 1')",
+            "Chat 2": "<h1>Hello from Chat 2</h1>",
+            "Chat 3": "echo Hello from Chat 3",
+        }

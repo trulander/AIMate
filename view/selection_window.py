@@ -1,11 +1,6 @@
-import threading
 import tkinter as tk
-from time import sleep
 from tkinter import Toplevel
 import logging
-from PIL import Image
-import pystray
-from core.config import *
 
 
 logger = logging.getLogger(__name__)
