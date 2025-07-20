@@ -14,13 +14,13 @@ class Orchestration:
     def __init__(self):
         logger.info("init orchestration")
         self.screenshot_service = Screenshoter()
-        self.audio_speach_recognition = RealTimeASR(
-            target_sample_rate=16000,
-            block_size=1024,
-            whisper_model='small',
-            language='ru',
-            hotkey='ctrl'
-        )
+        # self.audio_speach_recognition = RealTimeASR(
+        #     target_sample_rate=16000,
+        #     block_size=1024,
+        #     whisper_model='small',
+        #     language='ru',
+        #     hotkey='ctrl'
+        # )
         # self.audio_speach_recognition.start()
 
 

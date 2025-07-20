@@ -5,3 +5,6 @@ scipy
 faster_whisper
 keyboard
 pystray
+pynput
+pygments
+chlorophyll
