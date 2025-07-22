@@ -8,3 +8,8 @@ pystray
 pynput
 pygments
 chlorophyll
+pyautogui
+pyperclip #sudo apt-get install xclip
+python-json-logger
+pydantic_settings
+pydantic

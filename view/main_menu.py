@@ -1,6 +1,6 @@
+import logging
 import sys
 import tkinter as tk
-
 
 _debug = True
 _bgcolor = 'white'
@@ -11,6 +11,7 @@ _bgmode = 'light'
 _tabbg1 = '#d9d9d9'
 _tabbg2 = 'gray40'
 
+logger = logging.getLogger(__name__)
 
 class MainMenu:
     def __init__(self, top=None):
@@ -62,7 +63,8 @@ class MainMenu:
                 ,label='Остановить агента транскрипции')
 
     def close_app(self, *args):
-        self.top.destroy()
+        self.top.quit_window()
+
 
     def minimize_to_tray(self, *args):
         self.top.minimize_to_tray()
@@ -89,15 +91,10 @@ class MainMenu:
             sys.stdout.flush()
 
     def start_speach_service(self, *args):
-        if _debug:
-            print('test_support.start_speach_service')
-            for arg in args:
-                print('    another arg:', arg)
-            sys.stdout.flush()
+        logger.info(f'start_speach_service')
+        self.top.orchestrator.start_speach_service()
 
     def stop_speach_service(self, *args):
-        if _debug:
-            print('test_support.stop_speach_service')
-            for arg in args:
-                print('    another arg:', arg)
-            sys.stdout.flush()
+        logger.info(f'stop_speach_service')
+        self.top.orchestrator.stop_speach_service()
+

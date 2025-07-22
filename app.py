@@ -1,9 +1,13 @@
 import logging
 
 from business_logic.orchestration import Orchestration
-from core.config import *
+from core.config import settings
+from core.logging_config import configure_logging
+
 from view.main_window import MainWindow
 
+
+configure_logging()
 logger = logging.getLogger(__name__)
 
 

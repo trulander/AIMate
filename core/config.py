@@ -1,4 +1,17 @@
-import logging
+from typing import Optional
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+from pydantic import field_validator, computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    # FastAPI settings
+    SERVICE_NAME: str = "AIMate"
+
+    # Logging settings
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str =  "json" #"text"
+    TRACE_CALLER: bool = True
+
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
+
+settings = Settings() 

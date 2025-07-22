@@ -11,9 +11,9 @@ import tkinter as tk
 logger = logging.getLogger(__name__)
 
 
-class Screenshoter:
+class ScreenshotService:
     def __init__(self):
-        logger.info('Initializing Screenshoter')
+        logger.info('Initializing ScreenshotService')
 
     def take_screenshot(self, bbox: tuple):
         try:
@@ -76,7 +76,7 @@ class Screenshoter:
 if __name__ == "__main__":
     def take_screenshot(label):
         bbox = (100, 100, 600, 500)
-        img = Screenshoter().take_screenshot(bbox)
+        img = ScreenshotService().take_screenshot(bbox)
         img_tk = ImageTk.PhotoImage(img)
         label.config(image=img_tk)
         label.image = img_tk

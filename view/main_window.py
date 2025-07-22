@@ -15,17 +15,6 @@ from view.status_bar import StatusBar
 logger = logging.getLogger(__name__)
 
 
-# LEXERS = {
-#     "text": lexers.TextLexer,
-#     "python": lexers.PythonLexer,
-#     "javascript": lexers.JavascriptLexer,
-#     "html": lexers.HtmlLexer,
-#     "bash": lexers.BashLexer,
-#     "json": lexers.JsonLexer,
-#     "css": lexers.CssLexer,
-# }
-
-
 class MainWindow(tk.Tk):
     def __init__(self, orchestrator: Orchestration):
         super().__init__()
@@ -36,13 +25,14 @@ class MainWindow(tk.Tk):
         self.selection_rect = None
         self.start_position = None
         self.selection_window = None
+        self.tray_icon = None
         self.protocol('WM_DELETE_WINDOW', self.minimize_to_tray)
 
         self.configure(background="white")
         self.configure(highlightbackground="white")
         self.configure(highlightcolor="black")
 
-        MainMenu(self)
+        self.main_menu = MainMenu(self)
 
         # Основной контент
         main_frame = tk.Frame(self, bg="white")
@@ -88,7 +78,7 @@ class MainWindow(tk.Tk):
         # Кнопка отправки
         self.send_button = tk.Button(self.right_frame, text="Отправить", command=self.send_message)
         self.send_button.pack(anchor="e", padx=10, pady=(0, 10))
-        StatusBar(self)
+        self.status_bar = StatusBar(self)
         # btn = tk.Button(self, text="Mark Area", command=self.mark_area)
         # btn.pack(pady=20)
         #
@@ -126,19 +116,22 @@ class MainWindow(tk.Tk):
 
     def change_language(self, event=None):
         logger.info(f"change_language: {event}")
-        self.default_lexer = Lexers[event].value
+        if event:
+            self.default_lexer = Lexers[event].value
         out_text = self.editor.get("1.0", tk.END)
         in_text = self.input_editor.get("1.0", tk.END)
-        self.create_editor(self.editor_frame, "editor", initial_text=out_text, height=None)
-        self.create_editor(self.input_frame, "input_editor", initial_text=in_text, height=7)
+        self.create_editor(self.editor_frame, "editor", initial_text=out_text, height=1)
+        self.create_editor(self.input_frame, "input_editor", initial_text=in_text, height=1)
 
     def select_chat(self, event=None):
         selection = self.chat_listbox.curselection()
         if not selection:
             return
         chat_name = self.chat_listbox.get(selection[0])
-        chat_text = self.chat_sessions.get(chat_name, "")
-        self.create_editor(self.editor_frame, "editor", initial_text=chat_text, height=15)
+        chat_text = f"{self.chat_sessions.get(chat_name, '')}\n\n"
+        self.create_editor(self.editor_frame, "editor", initial_text=chat_text, height=1)
+
+
 
     def send_message(self):
         text = self.input_editor.get("1.0", tk.END).strip()
@@ -150,7 +143,7 @@ class MainWindow(tk.Tk):
 
     def show_screenshot(self):
         self.mark_area()
-        frame = self.orchestrator.get_screenshot(coords=self.orchestrator.coords)
+        frame = self.orchestrator.get_screenshot(coords=self.orchestrator.__coords)
         img_tk = ImageTk.PhotoImage(frame)
         self.label.config(image=img_tk)
         self.label.image = img_tk
@@ -193,6 +186,7 @@ class MainWindow(tk.Tk):
     def quit_window(self, icon=None, item=None):
         if self.tray_icon:
             self.tray_icon.stop()
+        self.main_menu.stop_speach_service()
         self.destroy()
 
     def show_window(self, icon=None, item=None):

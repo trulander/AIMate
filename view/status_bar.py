@@ -1,8 +1,10 @@
+import logging
 import tkinter as tk
 from tkinter import ttk
 
 from entities.lexers import Lexers
 
+logger = logging.getLogger(__name__)
 
 class StatusBar:
     def __init__(self, root):
@@ -21,7 +23,6 @@ class StatusBar:
             command=root.change_language
         )
         lang_menu.pack(side=tk.LEFT, padx=5, pady=2)
-        # lang_menu.bind("<<OptionMenuSelected>>", root.change_language)
 
         # Пример: текстовая метка
         status_label = tk.Label(status_bar, text="Готово", anchor="w")
