@@ -34,7 +34,7 @@ class ASRService:
 
         self.__queue_recognised_text = multiprocessing.Queue()
 
-        atexit.register(self.stop_speach_service)
+        atexit.register(self.stop)
 
 
     def start_speach_service(self):
@@ -51,7 +51,7 @@ class ASRService:
 
             logger.info("Процесс для RealTimeASR запущен")
 
-    def stop_speach_service(self):
+    def stop(self):
         logger.info(f'stop_speach_service')
         if self.__process_speach_recognition is not None:
             self.__stop_event_process_speach_recognition.set()
@@ -94,3 +94,4 @@ class ASRService:
     def __callback_text_recognition(self, text):
         logger.info(f"__callback_text_recognition - Распознанный текст: {text}")
         self.__hot_key_handler_service.keyboard_type_text(text=text)
+

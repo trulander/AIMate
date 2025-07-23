@@ -1,9 +1,11 @@
 import logging
-import os
 import platform
 import subprocess
 from PIL import Image, ImageTk, ImageGrab
 import tkinter as tk
+
+from utils.utils import is_wayland, detect_wayland_compositor
+
 # import mss
 
 
@@ -17,8 +19,8 @@ class ScreenshotService:
 
     def take_screenshot(self, bbox: tuple):
         try:
-            if platform.system() == "Linux" and self.is_wayland():
-                compositor = self.detect_wayland_compositor()
+            if platform.system() == "Linux" and is_wayland():
+                compositor = detect_wayland_compositor()
                 path = "/tmp/screenshot.png"
                 if compositor == "kwin":
                     img = self.screenshot_wayland_with_spectacle(path)
@@ -35,21 +37,6 @@ class ScreenshotService:
         except Exception as e:
             logger.error(e)
             # self.label.config(text=f"Ошибка: {e}")
-
-    def is_wayland(self):
-        return os.environ.get('XDG_SESSION_TYPE') == 'wayland'
-
-    def detect_wayland_compositor(self):
-        """
-        Возвращает имя композитора на Wayland: 'kwin', 'sway' или None
-        """
-        desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
-        session = os.environ.get("DESKTOP_SESSION", "").lower()
-        if "plasma" in desktop or "plasma" in session or "kde" in desktop:
-            return "kwin"
-        elif "sway" in session or "sway" in desktop:
-            return "sway"
-        return None
 
     def screenshot_windows_x11(self, bbox):
         # with mss.mss() as sct:

@@ -181,7 +181,7 @@ class MainWindow(tk.Tk):
         )
 
         self.tray_icon = pystray.Icon("myapp", image, "My App", menu)
-        self.tray_icon.run()
+        self.tray_icon.start()
 
     def quit_window(self, icon=None, item=None):
         if self.tray_icon:

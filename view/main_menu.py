@@ -1,6 +1,10 @@
 import logging
 import sys
 import tkinter as tk
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from view.main_window import MainWindow
 
 _debug = True
 _bgcolor = 'white'
@@ -14,7 +18,7 @@ _tabbg2 = 'gray40'
 logger = logging.getLogger(__name__)
 
 class MainMenu:
-    def __init__(self, top=None):
+    def __init__(self, top:"MainWindow" =None):
         self.top = top
 
         self.menubar = tk.Menu(top,font="TkMenuFont",bg='white',fg=_fgcolor)

@@ -1,13 +1,16 @@
 import tkinter as tk
 from tkinter import Toplevel
 import logging
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from view.main_window import MainWindow
 
 logger = logging.getLogger(__name__)
 
 
 class SelectionWindow(Toplevel):
-    def __init__(self, main_window):
+    def __init__(self, main_window: "MainWindow"):
         super().__init__(main_window)
         self.main_window = main_window
         self.title("Select Area")
