@@ -180,8 +180,8 @@ class MainWindow(tk.Tk):
             pystray.MenuItem('Quit', self.quit_window)
         )
 
-        self.tray_icon = pystray.Icon("myapp", image, "My App", menu)
-        self.tray_icon.start()
+        self.tray_icon = pystray.Icon("AIMate", image, "AIMate", menu)
+        self.tray_icon.run()
 
     def quit_window(self, icon=None, item=None):
         if self.tray_icon:
