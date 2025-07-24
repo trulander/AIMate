@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from view.main_window import MainWindow
+    from presentation.main_window import MainWindow
 
 logger = logging.getLogger(__name__)
 

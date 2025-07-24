@@ -3,7 +3,6 @@ import os
 import subprocess
 import sys
 import uuid
-from collections import defaultdict
 from queue import Queue, Empty
 import time
 import atexit
@@ -13,8 +12,8 @@ import traceback
 import socket
 import _pickle
 
-from business_logic.hotkey_handler.Ihot_key_handler import IHotkeyHandler
-from entities.hot_key import HotKey
+from application.interfaces.Ihot_key_handler import IHotkeyHandler
+from domain.entities.hot_key import HotKey
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +84,11 @@ class HotkeyHandlerClient(IHotkeyHandler):
 
     def __start_hot_key_server(self):
         # Определим корень проекта как директорию этого скрипта
-        project_root = os.path.abspath(".")
+        project_root = os.path.abspath("")
 
         # Пути относительные к корню проекта
         script = os.path.join(project_root, "hot_key_handler_server.py")
-        askpass = os.path.join(project_root, "entities", "gui_askpass.py")
+        askpass = os.path.join(project_root, "core", "gui_askpass.py")
         python_venv_path = os.path.join(project_root, ".venv", "bin", "python")
 
         # Подготовка окружения

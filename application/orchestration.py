@@ -1,9 +1,9 @@
 import logging
 import cv2
 import numpy as np
-from business_logic.asr_service import ASRService
-from business_logic.screenshot_service import ScreenshotService
-from business_logic.hot_key_handler_service import HotkeyHandlerService
+from application.services.asr_service import ASRService
+from application.services.screenshot_service import ScreenshotService
+from application.services.hot_key_service import HotkeyService
 
 
 logger = logging.getLogger(__name__)
@@ -12,9 +12,13 @@ logger = logging.getLogger(__name__)
 class Orchestration:
     def __init__(self):
         logger.info("init orchestration")
-        self.__hot_key_handler_service = HotkeyHandlerService()
+
+
+        self.__hot_key_handler_service = HotkeyService()
         self.__hot_key_handler_service.start()
         self.__screenshot_service = ScreenshotService()
+
+
         self.__asr_service = ASRService(
             whisper_model="medium",
             language="ru",
@@ -38,15 +42,9 @@ class Orchestration:
         cv2.imshow("test", frame)
         cv2.waitKey(1)
 
-    def send_message(self, message: str):
-        pass
 
-    def get_chat_list(self) -> dict:
-        return {
-            "Chat 1": "print('Hello from Chat 1')",
-            "Chat 2": "<h1>Hello from Chat 2</h1>",
-            "Chat 3": "echo Hello from Chat 3",
-        }
+
+
 
     def start_speach_service(self):
         self.__asr_service.start_speach_service()

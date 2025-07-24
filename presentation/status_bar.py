@@ -1,25 +1,16 @@
 import logging
 import tkinter as tk
-from enum import Enum
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
-from entities.lexers import Lexers
+from domain.enums.lexers import Lexers
+from domain.enums.status_statusbar import Status
+
 if TYPE_CHECKING:
-    from view.main_window import MainWindow
+    from presentation.main_window import MainWindow
 
 
 logger = logging.getLogger(__name__)
-
-
-class Status(Enum):
-    IDLE = ("🟢", "Готово")
-    WORKING = ("🟡", "Инициализация")
-    ERROR = ("🔴", "Ошибка")
-
-    def __init__(self, icon, text):
-        self.icon = icon
-        self.text = text
 
 
 class StatusBar:

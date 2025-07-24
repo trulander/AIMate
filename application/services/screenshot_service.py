@@ -4,10 +4,7 @@ import subprocess
 from PIL import Image, ImageTk, ImageGrab
 import tkinter as tk
 
-from utils.utils import is_wayland, detect_wayland_compositor
-
-# import mss
-
+from core.utils.utils import is_wayland, detect_wayland_compositor
 
 
 logger = logging.getLogger(__name__)

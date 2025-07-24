@@ -1,4 +1,5 @@
 import logging
+import os
 
 import numpy as np
 from faster_whisper import WhisperModel
@@ -19,11 +20,13 @@ class SpeechRecognizer:
             compute_type: тип вычислений ("int8", "int16", "float16", "float32")
         """
         logger.info(f"Загружаем модель Faster-Whisper: {model_size}")
+        project_root = os.path.abspath(".")
+        download_root = os.path.join(project_root, "core", "cache", "models")
         self.model = WhisperModel(
             model_size,
             device=device,
             compute_type=compute_type,
-            download_root="models"
+            download_root=download_root
         )
         self.language = language
         self.sample_rate = 16000

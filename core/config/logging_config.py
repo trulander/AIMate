@@ -1,16 +1,12 @@
 import inspect
 import logging
 import logging.config
-import re
 import sys
 import time
 import os
-import socket
-import traceback
-import uuid
 from pythonjsonlogger import jsonlogger
 
-from core.config import settings
+from core.config.config import settings
 
 
 class CustomJsonFormatter(jsonlogger.JsonFormatter):

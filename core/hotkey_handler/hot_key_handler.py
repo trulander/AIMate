@@ -4,8 +4,8 @@ import atexit
 import keyboard
 import pyperclip
 
-from business_logic.hotkey_handler.Ihot_key_handler import IHotkeyHandler
-from entities.hot_key import HotKey
+from application.interfaces.Ihot_key_handler import IHotkeyHandler
+from domain.entities.hot_key import HotKey
 
 logger = logging.getLogger(__name__)
 

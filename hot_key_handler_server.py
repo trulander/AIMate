@@ -6,9 +6,8 @@ import time
 import traceback
 import logging
 
-from business_logic.hotkey_handler.hot_key_handler import HotkeyHandler
-
-
+from application.interfaces.Ihot_key_handler import IHotkeyHandler
+from core.hotkey_handler.hot_key_handler import HotkeyHandler
 
 logging.basicConfig(level=logging.INFO, format='[server] %(message)s')
 logger = logging.getLogger(__name__)
@@ -24,7 +23,7 @@ class HotKeyHandlerServer:
         self.__event_queue = queue.Queue()
         self.__send_lock = Lock()
         atexit.register(self.cleanup)
-        self.hot_key_handler = HotkeyHandler()
+        self.hot_key_handler: IHotkeyHandler = HotkeyHandler()
 
     def run(self):
         try:

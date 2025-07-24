@@ -3,29 +3,29 @@ import logging
 import multiprocessing
 import threading
 from queue import Empty
-from business_logic.audio_speach_recognition.real_time_asr import RealTimeASR
-from business_logic.audio_speach_recognition.speach_recognizer import SpeechRecognizer
-from business_logic.hot_key_handler_service import HotkeyHandlerService
+from core.audio_speach_recognition.real_time_asr import RealTimeASR
+from core.audio_speach_recognition.speach_recognizer import SpeechRecognizer
+from application.services.hot_key_service import HotkeyService
+
 
 logger = logging.getLogger(__name__)
 
 
 class ASRService:
     def __init__(self,
+                 hot_key_handler_service: HotkeyService,
                  whisper_model="small",
                  language="ru",
                  target_sample_rate: int = 16000,
                  block_size: int = 1024,
-                 hotkey: list = [],
-                 hot_key_handler_service: HotkeyHandlerService = None
+                 hotkey: list = None,
                  ):
         logger.info(f"Initial speach recognition service ")
-
         self.__whisper_model = whisper_model
         self.__language = language
         self.__target_sample_rate = target_sample_rate
         self.__block_size = block_size
-        self.__hotkey = hotkey
+        self.__hotkey = hotkey if hotkey else ['ctrl', 'alt']
         self.__hot_key_handler_service = hot_key_handler_service
 
         self.__process_speach_recognition: threading.Thread = None
@@ -74,7 +74,7 @@ class ASRService:
         logger.info(f"loop_calback остановлен")
 
     def __initial_speach_recognition_service(self):
-        # hot_key_handler_service = HotkeyHandlerService()
+        # hot_key_handler_service = HotkeyService()
         # hot_key_handler_service.run()
         real_time_asr = RealTimeASR(
             target_sample_rate=self.__target_sample_rate,
@@ -85,7 +85,7 @@ class ASRService:
             speech_recognizer=SpeechRecognizer(
                 model_size=self.__whisper_model,
                 language=self.__language
-            ),
+            )
         )
         real_time_asr.start(
             stop_event=self.__stop_event_process_speach_recognition
@@ -94,4 +94,3 @@ class ASRService:
     def __callback_text_recognition(self, text):
         logger.info(f"__callback_text_recognition - Распознанный текст: {text}")
         self.__hot_key_handler_service.keyboard_type_text(text=text)
-

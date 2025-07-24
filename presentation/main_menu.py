@@ -4,7 +4,7 @@ import tkinter as tk
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from view.main_window import MainWindow
+    from presentation.main_window import MainWindow
 
 _debug = True
 _bgcolor = 'white'
@@ -69,7 +69,6 @@ class MainMenu:
     def close_app(self, *args):
         self.top.quit_window()
 
-
     def minimize_to_tray(self, *args):
         self.top.minimize_to_tray()
 
@@ -95,10 +94,10 @@ class MainMenu:
             sys.stdout.flush()
 
     def start_speach_service(self, *args):
-        logger.info(f'start_speach_service')
-        self.top.orchestrator.start_speach_service()
+        logger.info('start_speach_service')
+        self.top.view_service.orchestrator.start_speach_service()
 
     def stop_speach_service(self, *args):
-        logger.info(f'stop_speach_service')
-        self.top.orchestrator.stop_speach_service()
+        logger.info('stop_speach_service')
+        self.top.view_service.orchestrator.stop_speach_service()
 

@@ -1,24 +1,22 @@
 import tkinter as tk
-from tkinter import ttk
 import logging
 from PIL import Image, ImageTk
 import pystray
 from chlorophyll import CodeView
-from pygments import lexers
+from application.services.view_service import ViewService
+from domain.enums.lexers import Lexers
+from presentation.main_menu import MainMenu
+from presentation.selection_window import SelectionWindow
+from presentation.status_bar import StatusBar
 
-from business_logic.orchestration import Orchestration
-from entities.lexers import Lexers
-from view.main_menu import MainMenu
-from view.selection_window import SelectionWindow
-from view.status_bar import StatusBar
 
 logger = logging.getLogger(__name__)
 
 
 class MainWindow(tk.Tk):
-    def __init__(self, orchestrator: Orchestration):
+    def __init__(self, view_service: ViewService):
         super().__init__()
-        self.orchestrator = orchestrator
+        self.view_service: ViewService = view_service
         self.title("Main Window")
         self.geometry("1045x642+1036+533")
         self.minsize(800, 1000)
@@ -79,18 +77,14 @@ class MainWindow(tk.Tk):
         self.send_button = tk.Button(self.right_frame, text="Отправить", command=self.send_message)
         self.send_button.pack(anchor="e", padx=10, pady=(0, 10))
         self.status_bar = StatusBar(self)
-        # btn = tk.Button(self, text="Mark Area", command=self.mark_area)
-        # btn.pack(pady=20)
-        #
-        # btn = tk.Button(self, text="show screenshot", command=self.show_screenshot)
-        # btn.pack(pady=20)
-        #
-        # self.label = tk.Label(self)
-        # self.label.pack()
+
+
+    def run_app(self):
+        self.mainloop()
 
     def update_chat_listbox(self):
         self.chat_listbox.delete(0, tk.END)  # Очищает список
-        self.chat_sessions = self.orchestrator.get_chat_list()
+        self.chat_sessions = self.view_service.get_chat_list()
         for name in self.chat_sessions:
             self.chat_listbox.insert(tk.END, name)
 
@@ -136,14 +130,14 @@ class MainWindow(tk.Tk):
     def send_message(self):
         text = self.input_editor.get("1.0", tk.END).strip()
         print("Отправка запроса:", text)
-        self.orchestrator.send_message(message=text)
+        self.view_service.send_message(message=text)
         # result = ai_model.generate(text)
         # self.create_editor(self.editor_frame, "editor", initial_text=result, height=15)
 
 
     def show_screenshot(self):
         self.mark_area()
-        frame = self.orchestrator.get_screenshot(coords=self.orchestrator.__coords)
+        frame = self.view_service.get_screenshot(coords=self.view_service.__coords)
         img_tk = ImageTk.PhotoImage(frame)
         self.label.config(image=img_tk)
         self.label.image = img_tk

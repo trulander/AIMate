@@ -1,17 +1,16 @@
-from abc import ABC
-from typing import Callable
+from typing import Callable, Protocol
 
 
-class IHotkeyHandler(ABC):
+class IHotkeyHandler(Protocol):
 
     def keyboard_type_text(self, text: str):
-        raise NotImplementedError()
+        pass
 
     def add_hotkey(self, hotkey: list, on_press_callback: Callable[[tuple], None] = None, on_release_callback: Callable[[tuple], None] = None):
-        raise NotImplementedError()
+        pass
 
     def start(self):
-        raise NotImplementedError()
+        pass
 
     def stop(self):
-        raise NotImplementedError()
+        pass

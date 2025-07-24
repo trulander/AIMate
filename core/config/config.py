@@ -1,10 +1,6 @@
-from typing import Optional
-
-from pydantic import field_validator, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    # FastAPI settings
     SERVICE_NAME: str = "AIMate"
 
     # Logging settings

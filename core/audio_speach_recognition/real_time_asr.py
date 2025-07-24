@@ -5,11 +5,13 @@ import queue
 import threading
 import time
 from collections import deque
-
+from enum import Enum
 import numpy as np
+from core.audio_speach_recognition.speach_recognizer import SpeechRecognizer
+from application.services.hot_key_service import HotkeyService
+from domain.enums.status_statusbar import Status
 
-from business_logic.audio_speach_recognition.speach_recognizer import SpeechRecognizer
-from business_logic.hot_key_handler_service import HotkeyHandlerService
+
 
 logger = logging.getLogger(__name__)
 
@@ -37,18 +39,20 @@ try:
 except ImportError:
     logger.warning("SoundDevice not available")
 
-
+class AudioBackends(Enum):
+    GSTREAMER = "GSTREAMER"
+    SOUNDDEVICE = "SOUNDDEVICE"
 
 class RealTimeASR:
     def __init__(
         self,
+        hotkey: list,
+        hot_key_handler_service: HotkeyService,
+        queue_recognised_text: multiprocessing.Queue,
+        speech_recognizer: SpeechRecognizer,
         target_sample_rate=16000,
         block_size=1024,
-        hotkey: list = [],
-        hot_key_handler_service: HotkeyHandlerService = None,
-        queue_recognised_text: multiprocessing.Queue = None,
-        speech_recognizer: SpeechRecognizer = None,
-        preferred_backend=None,
+        preferred_backend=AudioBackends.GSTREAMER,
     ):
         """
         Инициализация системы распознавания речи
@@ -57,11 +61,10 @@ class RealTimeASR:
             target_sample_rate: частота дискретизации для модели
             block_size: размер блока аудио
             hotkey: комбинация клавиш для ручного режима
-            preferred_backend: 'gstreamer' или 'sounddevice' или None (авто)
+            preferred_backend: AudioBackends.GSTREAMER или AudioBackends.SOUNDDEVICE или None (авто)
         """
         self.__target_sample_rate = target_sample_rate
         self.__block_size = block_size
-        self.__audio_queue = queue.Queue()
         self.__queue_recognised_text: multiprocessing.Queue = queue_recognised_text
         self.__running: multiprocessing.Event = None
         self.__hotkey = hotkey
@@ -70,10 +73,14 @@ class RealTimeASR:
 
         # Выбираем backend
         self.__backend = self.__choose_backend(preferred_backend)
-        logger.info(f"Используем audio backend: {self.__backend}")
+        logger.info(f"Используем audio backend: {self.__backend.value}")
+
+        #sounddevice буффер
+        self.__audio_buffer = deque()
+
 
         # Общие буферы
-        self.__audio_buffer = deque()
+        self.__audio_queue = queue.Queue()
         self.__speech_buffer = []
         self.__recording_speech = False
         self.__manual_recording = False
@@ -84,9 +91,9 @@ class RealTimeASR:
         self.__max_speech_length = int(60 * target_sample_rate)
 
         # Инициализация специфичных для backend компонентов
-        if self.__backend == "gstreamer":
+        if self.__backend == AudioBackends.GSTREAMER:
             self.__init_gstreamer()
-        elif self.__backend == "sounddevice":
+        elif self.__backend == AudioBackends.SOUNDDEVICE:
             self.__init_sounddevice()
         else:
             raise RuntimeError("Нет доступных audio backend'ов")
@@ -101,12 +108,12 @@ class RealTimeASR:
         processing_thread.daemon = True
         processing_thread.start()
 
-        logger.info(f"Начинаем запись с микрофона через {self.__backend}")
+        logger.info(f"Начинаем запись с микрофона через {self.__backend.value}")
 
         try:
-            if self.__backend == "gstreamer":
+            if self.__backend == AudioBackends.GSTREAMER:
                 self.__start_gstreamer()
-            elif self.__backend == "sounddevice":
+            elif self.__backend == AudioBackends.SOUNDDEVICE:
                 self.__start_sounddevice()
 
         except KeyboardInterrupt:
@@ -120,7 +127,7 @@ class RealTimeASR:
             if self.__running:
                 self.__running.set()
 
-            if self.__backend == "gstreamer":
+            if self.__backend == AudioBackends.GSTREAMER:
                 if self.__pipeline:
                     self.__pipeline.set_state(Gst.State.NULL)
                 if self.__main_loop and self.__main_loop.is_running():
@@ -131,15 +138,15 @@ class RealTimeASR:
 
         logger.info("Запись остановлена")
 
-    def __choose_backend(self, preferred_backend):
+    def __choose_backend(self, preferred_backend: AudioBackends) -> AudioBackends | None:
         """Выбор наиболее подходящего backend'а"""
         system = platform.system().lower()
 
         if preferred_backend:
-            if preferred_backend == "gstreamer" and GSTREAMER_AVAILABLE:
-                return "gstreamer"
-            elif preferred_backend == "sounddevice" and SOUNDDEVICE_AVAILABLE:
-                return "sounddevice"
+            if preferred_backend == AudioBackends.GSTREAMER and GSTREAMER_AVAILABLE:
+                return AudioBackends.GSTREAMER
+            elif preferred_backend == AudioBackends.SOUNDDEVICE and SOUNDDEVICE_AVAILABLE:
+                return AudioBackends.SOUNDDEVICE
             else:
                 logger.warning(
                     f"Предпочитаемый backend '{preferred_backend}' недоступен"
@@ -148,14 +155,14 @@ class RealTimeASR:
         # Автоматический выбор на основе платформы
         if system == "linux":
             if GSTREAMER_AVAILABLE:
-                return "gstreamer"
+                return AudioBackends.GSTREAMER
             elif SOUNDDEVICE_AVAILABLE:
-                return "sounddevice"
+                return AudioBackends.SOUNDDEVICE
         else:  # Windows, macOS
             if SOUNDDEVICE_AVAILABLE:
-                return "sounddevice"
+                return AudioBackends.SOUNDDEVICE
             elif GSTREAMER_AVAILABLE:
-                return "gstreamer"
+                return AudioBackends.GSTREAMER
 
         return None
 
@@ -196,8 +203,9 @@ class RealTimeASR:
             )
 
             self.__pipeline = Gst.parse_launch(pipeline_str)
+            self.__pipeline.set_state(state=Gst.State.PAUSED)
             self.__appsink = self.__pipeline.get_by_name("sink")
-            self.__appsink.connect("new-sample", self.__on_new_sample)
+            self.__appsink.connect("new-sample", self.__callback_gstream)
 
             self.__bus = self.__pipeline.get_bus()
             self.__bus.add_signal_watch()
@@ -258,9 +266,10 @@ class RealTimeASR:
             channels=1,
             samplerate=self.__device_sample_rate,
             blocksize=self.__block_size,
-            callback=self.__audio_callback,
+            callback=self.__callback_sounddevice,
             dtype=np.float32,
-        ):
+        ) as input_stream:
+            # input_stream.start()
             while not (self.__running and self.__running.is_set()):
                 time.sleep(0.1)
 
@@ -273,7 +282,7 @@ class RealTimeASR:
 
 
 
-    def __on_new_sample(self, appsink):
+    def __callback_gstream(self, appsink):
         """Callback для GStreamer"""
         try:
             sample = appsink.emit("pull-sample")
@@ -297,7 +306,7 @@ class RealTimeASR:
             logger.error(f"Ошибка в GStreamer callback: {e}")
             return Gst.FlowReturn.ERROR
 
-    def __audio_callback(self, indata, frames, time, status):
+    def __callback_sounddevice(self, indata, frames, time, status):
         """Callback для SoundDevice"""
         if status:
             logger.info(f"Аудио статус: {status}")
@@ -317,7 +326,7 @@ class RealTimeASR:
             if self.__main_loop:
                 self.__main_loop.quit()
 
-    def __resample_audio(self, audio_data):
+    def __resample_audio_sounddevice(self, audio_data):
         """Ресэмплирование для SoundDevice"""
         if not self.__need_resample:
             return audio_data
@@ -355,6 +364,7 @@ class RealTimeASR:
             self.__manual_recording = True
             self.__manual_start_time = time.time()
             self.__speech_buffer = []
+            # self.__view_service.set_status_record(status=Status.STARTED_RECORD)
             logger.info(f"🎤 РУЧНАЯ ЗАПИСЬ НАЧАЛАСЬ (нажата {self.__hotkey})")
 
     def __on_hotkey_release(self, *args, **kwargs):
@@ -375,6 +385,7 @@ class RealTimeASR:
                     target=self.__process_speech_segment, daemon=True
                 )
                 recognition_thread.start()
+            # self.__view_service.set_status_record(status=Status.PROCESSING_RECORD)
 
     def __process_speech_segment(self):
         """Обработка речевого сегмента"""
@@ -400,6 +411,8 @@ class RealTimeASR:
         else:
             logger.warning("Речь не распознана или содержит только шум\n")
 
+        # self.__view_service.set_status_record(status=Status.FINISHED_RECORD)
+
     def __process_audio(self):
         """Обработка аудио в отдельном потоке"""
         logger.info("Процесс обработки аудио запущен...")
@@ -409,8 +422,8 @@ class RealTimeASR:
                 audio_chunk = self.__audio_queue.get(timeout=1.0)
 
                 # Ресэмплирование только для SoundDevice
-                if self.__backend == "sounddevice":
-                    audio_chunk = self.__resample_audio(audio_chunk)
+                if self.__backend == AudioBackends.SOUNDDEVICE:
+                    audio_chunk = self.__resample_audio_sounddevice(audio_chunk)
 
                 self.__audio_buffer.extend(audio_chunk)
 

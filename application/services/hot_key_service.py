@@ -1,19 +1,19 @@
 import platform
 import logging
-from business_logic.hotkey_handler.Ihot_key_handler import IHotkeyHandler
-from business_logic.hotkey_handler.hot_key_handler import HotkeyHandler
-from business_logic.hotkey_handler.hot_key_handler_client import HotkeyHandlerClient
 
+from application.interfaces.Ihot_key_handler import IHotkeyHandler
+from core.hotkey_handler.hot_key_handler import HotkeyHandler
+from core.hotkey_handler.hot_key_handler_client import HotkeyHandlerClient
 
 logger = logging.getLogger(__name__)
 
 
-class HotkeyHandlerService():
+class HotkeyService():
     def __init__(self):
         if platform.system() == "Linux":
             self.hot_key_handler: IHotkeyHandler = HotkeyHandlerClient()
         else:
-            self.hot_key_handler = HotkeyHandler()
+            self.hot_key_handler: IHotkeyHandler = HotkeyHandler()
 
     def stop(self):
         self.hot_key_handler.stop()
