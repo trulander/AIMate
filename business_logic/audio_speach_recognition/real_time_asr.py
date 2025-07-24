@@ -93,6 +93,44 @@ class RealTimeASR:
 
         self.__setup_hotkeys()
 
+    def start(self, stop_event):
+        """Запуск записи и обработки"""
+        self.__running = stop_event
+
+        processing_thread = threading.Thread(target=self.__process_audio)
+        processing_thread.daemon = True
+        processing_thread.start()
+
+        logger.info(f"Начинаем запись с микрофона через {self.__backend}")
+
+        try:
+            if self.__backend == "gstreamer":
+                self.__start_gstreamer()
+            elif self.__backend == "sounddevice":
+                self.__start_sounddevice()
+
+        except KeyboardInterrupt:
+            logger.info("\nОстанавливаем запись...")
+        finally:
+            self.stop()
+
+    def stop(self):
+        """Остановка записи и обработки"""
+        try:
+            if self.__running:
+                self.__running.set()
+
+            if self.__backend == "gstreamer":
+                if self.__pipeline:
+                    self.__pipeline.set_state(Gst.State.NULL)
+                if self.__main_loop and self.__main_loop.is_running():
+                    self.__main_loop.quit()
+
+        except Exception as e:
+            logger.error(f"Ошибка при остановке: {e}")
+
+        logger.info("Запись остановлена")
+
     def __choose_backend(self, preferred_backend):
         """Выбор наиболее подходящего backend'а"""
         system = platform.system().lower()
@@ -200,27 +238,6 @@ class RealTimeASR:
         except:
             return 44100
 
-    def start(self, stop_event):
-        """Запуск записи и обработки"""
-        self.__running = stop_event
-
-        processing_thread = threading.Thread(target=self.__process_audio)
-        processing_thread.daemon = True
-        processing_thread.start()
-
-        logger.info(f"Начинаем запись с микрофона через {self.__backend}")
-
-        try:
-            if self.__backend == "gstreamer":
-                self.__start_gstreamer()
-            elif self.__backend == "sounddevice":
-                self.__start_sounddevice()
-
-        except KeyboardInterrupt:
-            logger.info("\nОстанавливаем запись...")
-        finally:
-            self.stop()
-
     def __start_gstreamer(self):
         """Запуск GStreamer"""
         ret = self.__pipeline.set_state(Gst.State.PLAYING)
@@ -254,22 +271,7 @@ class RealTimeASR:
         except Exception as e:
             logger.error(f"Ошибка в main loop: {e}")
 
-    def stop(self):
-        """Остановка записи и обработки"""
-        try:
-            if self.__running:
-                self.__running.set()
 
-            if self.__backend == "gstreamer":
-                if self.__pipeline:
-                    self.__pipeline.set_state(Gst.State.NULL)
-                if self.__main_loop and self.__main_loop.is_running():
-                    self.__main_loop.quit()
-
-        except Exception as e:
-            logger.error(f"Ошибка при остановке: {e}")
-
-        logger.info("Запись остановлена")
 
     def __on_new_sample(self, appsink):
         """Callback для GStreamer"""
