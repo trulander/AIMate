@@ -178,9 +178,9 @@ class MainWindow(tk.Tk):
         self.tray_icon.run()
 
     def quit_window(self, icon=None, item=None):
+        self.main_menu.stop_speach_service()
         if self.tray_icon:
             self.tray_icon.stop()
-        self.main_menu.stop_speach_service()
         self.destroy()
 
     def show_window(self, icon=None, item=None):

@@ -3,7 +3,9 @@ import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
+from core.event_dispatcher import dispatcher
 from domain.enums.lexers import Lexers
+from domain.enums.signal import Signal
 from domain.enums.status_statusbar import Status
 
 if TYPE_CHECKING:
@@ -35,6 +37,8 @@ class StatusBar:
 
         self.settings_btn = ttk.Button(self.status_bar, text="⚙️ Настройки")
         self.settings_btn.pack(side=tk.RIGHT, padx=5)
+
+        dispatcher.connect(sender=self, signal=Signal.set_status, receiver=self.set_status, weak=True)
 
     def set_status(self, status: Status):
         self.status_label.config(text=f"{status.icon} {status.text}")

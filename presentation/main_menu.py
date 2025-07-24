@@ -15,7 +15,9 @@ _bgmode = 'light'
 _tabbg1 = '#d9d9d9'
 _tabbg2 = 'gray40'
 
+
 logger = logging.getLogger(__name__)
+
 
 class MainMenu:
     def __init__(self, top:"MainWindow" =None):

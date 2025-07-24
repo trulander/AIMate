@@ -1,21 +1,15 @@
-from typing import TYPE_CHECKING
+import logging
 
 import numpy as np
-
 from application.orchestration import Orchestration
-from domain.enums.status_statusbar import Status
 
-# if TYPE_CHECKING:
 
+logger = logging.getLogger(__name__)
 
 
 class ViewService(object):
     def __init__(self, orchestrator: Orchestration):
         self.orchestrator: Orchestration = orchestrator
-
-
-    def set_status_record(self, status: Status):
-        pass
 
     def get_chat_list(self) -> dict:
         return {

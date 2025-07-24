@@ -5,11 +5,12 @@ import queue
 import time
 import traceback
 import logging
-
 from application.interfaces.Ihot_key_handler import IHotkeyHandler
+from core.config.logging_config import configure_logging
 from core.hotkey_handler.hot_key_handler import HotkeyHandler
 
-logging.basicConfig(level=logging.INFO, format='[server] %(message)s')
+
+configure_logging()
 logger = logging.getLogger(__name__)
 
 

@@ -13,7 +13,10 @@ import socket
 import _pickle
 
 from application.interfaces.Ihot_key_handler import IHotkeyHandler
+from core.event_dispatcher import dispatcher
 from domain.entities.hot_key import HotKey
+from domain.enums.signal import Signal
+from domain.enums.status_statusbar import Status
 
 logger = logging.getLogger(__name__)
 
@@ -75,11 +78,11 @@ class HotkeyHandlerClient(IHotkeyHandler):
         logging.info("Shutting down client...")
         self.__running = False
         try:
+            self.__connection_thread.join()
             if self.__conn:
                 self.__conn.close()
-            self.__connection_thread.join()
         except Exception:
-            pass
+            logging.error(traceback.format_exc())
         logging.info("Client stopped.")
 
     def __start_hot_key_server(self):
@@ -122,11 +125,12 @@ class HotkeyHandlerClient(IHotkeyHandler):
                 logging.info(f"Trying to connect to {self.__address} (attempt {retries + 1})...")
                 self.__conn = Client(self.__address, authkey=self.__authkey)
                 logging.info("Connected to server.")
+                dispatcher.send(signal=Signal.set_status, status=Status.IDLE)
                 return
             except (ConnectionRefusedError, socket.error):
                 retries += 1
                 time.sleep(self.__retry_interval)
-        raise ConnectionError("Failed to connect to server after retries.")
+        # raise ConnectionError("Failed to connect to server after retries.")
 
     def __handle_response(self, response: dict):
         match response:
@@ -148,8 +152,8 @@ class HotkeyHandlerClient(IHotkeyHandler):
                             logger.info(f"Received message: {msg}")
                         except (_pickle.UnpicklingError, EOFError, OSError):
                             logging.warning("Connection lost or corrupted data.")
-                            self.__running = False
-                            break
+                            # dispatcher.send(signal=Signal.set_status, status=Status.ERROR)
+                            raise
 
                         if isinstance(msg, dict) and 'response_to' in msg:
                             logger.info(f"Received response: {msg}")
@@ -161,8 +165,9 @@ class HotkeyHandlerClient(IHotkeyHandler):
                             self.__event_queue.put(msg)
                         else:
                             logging.warning(f"Unknown message from server: {msg}")
-            except Exception:
-                logging.error(traceback.format_exc())
+            except Exception as e:
+                logging.error(f"error: {e}")
+                dispatcher.send(signal=Signal.set_status, status=Status.ERROR)
                 self.__running = False
                 break
 

@@ -9,8 +9,9 @@ from enum import Enum
 import numpy as np
 from core.audio_speach_recognition.speach_recognizer import SpeechRecognizer
 from application.services.hot_key_service import HotkeyService
+from core.event_dispatcher import dispatcher
+from domain.enums.signal import Signal
 from domain.enums.status_statusbar import Status
-
 
 
 logger = logging.getLogger(__name__)
@@ -364,7 +365,7 @@ class RealTimeASR:
             self.__manual_recording = True
             self.__manual_start_time = time.time()
             self.__speech_buffer = []
-            # self.__view_service.set_status_record(status=Status.STARTED_RECORD)
+            dispatcher.send(signal=Signal.set_status, status=Status.STARTED_RECORD)
             logger.info(f"🎤 РУЧНАЯ ЗАПИСЬ НАЧАЛАСЬ (нажата {self.__hotkey})")
 
     def __on_hotkey_release(self, *args, **kwargs):
@@ -385,7 +386,7 @@ class RealTimeASR:
                     target=self.__process_speech_segment, daemon=True
                 )
                 recognition_thread.start()
-            # self.__view_service.set_status_record(status=Status.PROCESSING_RECORD)
+            dispatcher.send(signal=Signal.set_status, status=Status.PROCESSING_RECORD)
 
     def __process_speech_segment(self):
         """Обработка речевого сегмента"""
@@ -411,8 +412,7 @@ class RealTimeASR:
         else:
             logger.warning("Речь не распознана или содержит только шум\n")
 
-        # self.__view_service.set_status_record(status=Status.FINISHED_RECORD)
-
+        dispatcher.send(signal=Signal.set_status, status=Status.FINISHED_RECORD)
     def __process_audio(self):
         """Обработка аудио в отдельном потоке"""
         logger.info("Процесс обработки аудио запущен...")

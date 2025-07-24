@@ -5,7 +5,10 @@ import keyboard
 import pyperclip
 
 from application.interfaces.Ihot_key_handler import IHotkeyHandler
+from core.event_dispatcher import dispatcher
 from domain.entities.hot_key import HotKey
+from domain.enums.signal import Signal
+from domain.enums.status_statusbar import Status
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +38,7 @@ class HotkeyHandler(IHotkeyHandler):
             pass
 
     def start(self):
-        pass
+        dispatcher.send(signal=Signal.set_status, status=Status.IDLE)
 
     def _on_press(self, key):
         logger.debug(f'key {key.name} pressed')
