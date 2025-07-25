@@ -3,6 +3,10 @@ import sys
 import tkinter as tk
 from typing import TYPE_CHECKING
 
+from core.event_dispatcher import dispatcher
+from domain.enums.signal import Signal
+from domain.enums.status_statusbar import Status
+
 if TYPE_CHECKING:
     from presentation.main_window import MainWindow
 
@@ -97,6 +101,7 @@ class MainMenu:
 
     def start_speach_service(self, *args):
         logger.info('start_speach_service')
+        dispatcher.send(signal=Signal.set_status, status=Status.WORKING)
         self.top.view_service.orchestrator.start_speach_service()
 
     def stop_speach_service(self, *args):

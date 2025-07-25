@@ -76,11 +76,12 @@ class RealTimeASR:
         self.__backend = self.__choose_backend(preferred_backend)
         logger.info(f"Используем audio backend: {self.__backend.value}")
 
-        #sounddevice буффер
-        self.__audio_buffer = deque()
-
-
+        # Компоненты для управления аудиопотоком
+        self.__stream_active = False
+        self.__audio_stream = None  # Для SoundDevice
+        self.__stream_thread = None  # Для GStreamer
         # Общие буферы
+        self.__audio_buffer = deque()
         self.__audio_queue = queue.Queue()
         self.__speech_buffer = []
         self.__recording_speech = False
@@ -100,44 +101,6 @@ class RealTimeASR:
             raise RuntimeError("Нет доступных audio backend'ов")
 
         self.__setup_hotkeys()
-
-    def start(self, stop_event):
-        """Запуск записи и обработки"""
-        self.__running = stop_event
-
-        processing_thread = threading.Thread(target=self.__process_audio)
-        processing_thread.daemon = True
-        processing_thread.start()
-
-        logger.info(f"Начинаем запись с микрофона через {self.__backend.value}")
-
-        try:
-            if self.__backend == AudioBackends.GSTREAMER:
-                self.__start_gstreamer()
-            elif self.__backend == AudioBackends.SOUNDDEVICE:
-                self.__start_sounddevice()
-
-        except KeyboardInterrupt:
-            logger.info("\nОстанавливаем запись...")
-        finally:
-            self.stop()
-
-    def stop(self):
-        """Остановка записи и обработки"""
-        try:
-            if self.__running:
-                self.__running.set()
-
-            if self.__backend == AudioBackends.GSTREAMER:
-                if self.__pipeline:
-                    self.__pipeline.set_state(Gst.State.NULL)
-                if self.__main_loop and self.__main_loop.is_running():
-                    self.__main_loop.quit()
-
-        except Exception as e:
-            logger.error(f"Ошибка при остановке: {e}")
-
-        logger.info("Запись остановлена")
 
     def __choose_backend(self, preferred_backend: AudioBackends) -> AudioBackends | None:
         """Выбор наиболее подходящего backend'а"""
@@ -170,7 +133,7 @@ class RealTimeASR:
     def __init_gstreamer(self):
         """Инициализация GStreamer backend"""
         self.__pipeline = None
-        self.__main_loop = None
+        self.__glib_main_loop = None
         self.__bus = None
         self.__appsink = None
         self.__create_gst_pipeline()
@@ -183,12 +146,8 @@ class RealTimeASR:
 
         if self.__device_sample_rate != self.__target_sample_rate:
             self.__need_resample = True
-            self.__resample_ratio = (
-                self.__target_sample_rate / self.__device_sample_rate
-            )
-            logger.warning(
-                f"Будем ресэмплировать с {self.__device_sample_rate} Hz до {self.__target_sample_rate} Hz"
-            )
+            self.__resample_ratio = self.__target_sample_rate / self.__device_sample_rate
+            logger.warning(f"Будем ресэмплировать с {self.__device_sample_rate} Hz до {self.__target_sample_rate} Hz")
         else:
             self.__need_resample = False
 
@@ -204,7 +163,6 @@ class RealTimeASR:
             )
 
             self.__pipeline = Gst.parse_launch(pipeline_str)
-            self.__pipeline.set_state(state=Gst.State.PAUSED)
             self.__appsink = self.__pipeline.get_by_name("sink")
             self.__appsink.connect("new-sample", self.__callback_gstream)
 
@@ -212,9 +170,7 @@ class RealTimeASR:
             self.__bus.add_signal_watch()
             self.__bus.connect("message", self.__on_bus_message)
 
-            logger.info(
-                f"GStreamer pipeline создан для частоты {self.__target_sample_rate} Hz"
-            )
+            logger.info(f"GStreamer pipeline создан для частоты {self.__target_sample_rate} Hz")
 
         except Exception as e:
             logger.error(f"Ошибка создания GStreamer pipeline: {e}")
@@ -247,41 +203,112 @@ class RealTimeASR:
         except:
             return 44100
 
-    def __start_gstreamer(self):
-        """Запуск GStreamer"""
+    def start(self, stop_event):
+        """Запуск сервиса (но не записи - она начнется по горячим клавишам)"""
+        self.__running = stop_event
+
+        # Запускаем поток обработки аудио (он будет ждать данных)
+        processing_thread = threading.Thread(target=self.__process_audio)
+        processing_thread.daemon = True
+        processing_thread.start()
+
+        logger.info(f"Сервис запущен. Нажмите {self.__hotkey} для начала записи речи.")
+        logger.info("В режиме ожидания - аудиопоток не активен.")
+
+        try:
+            dispatcher.send(signal=Signal.set_status, status=Status.IDLE)
+            # Просто ждем сигнала остановки, не запуская аудиопоток
+            while not (self.__running and self.__running.is_set()):
+                time.sleep(0.1)
+
+        except KeyboardInterrupt:
+            logger.info("\nОстанавливаем сервис...")
+        finally:
+            self.stop()
+
+    def __start_gstreamer_stream(self):
+        """Запуск GStreamer потока"""
+        if self.__stream_active:
+            return
+        logger.info("Запуск GStreamer потока")
         ret = self.__pipeline.set_state(Gst.State.PLAYING)
         if ret == Gst.StateChangeReturn.FAILURE:
             raise Exception("Не удалось запустить GStreamer pipeline")
 
-        self.__main_loop = GLib.MainLoop()
-        loop_thread = threading.Thread(target=self.__run_main_loop)
-        loop_thread.daemon = True
-        loop_thread.start()
+        self.__glib_main_loop = GLib.MainLoop()
+        self.__stream_thread = threading.Thread(target=self.__run_glib_main_loop)
+        self.__stream_thread.daemon = True
+        self.__stream_thread.start()
 
-        while not (self.__running and self.__running.is_set()):
-            time.sleep(0.1)
+        self.__stream_active = True
+        logger.info("GStreamer поток запущен")
 
-    def __start_sounddevice(self):
-        """Запуск SoundDevice"""
-        with sd.InputStream(
+    def __stop_gstreamer_stream(self):
+        """Остановка GStreamer потока"""
+        if not self.__stream_active:
+            return
+        logger.info("Остановка GStreamer потока")
+        if self.__pipeline:
+            self.__pipeline.set_state(Gst.State.NULL)
+        if self.__glib_main_loop and self.__glib_main_loop.is_running():
+            self.__glib_main_loop.quit()
+
+        self.__stream_active = False
+        logger.info("GStreamer поток остановлен")
+
+    def __start_sounddevice_stream(self):
+        """Запуск SoundDevice потока"""
+        if self.__stream_active:
+            return
+        logger.info("Запуск SoundDevice потока")
+        self.__audio_stream = sd.InputStream(
             channels=1,
             samplerate=self.__device_sample_rate,
             blocksize=self.__block_size,
             callback=self.__callback_sounddevice,
             dtype=np.float32,
-        ) as input_stream:
-            # input_stream.start()
-            while not (self.__running and self.__running.is_set()):
-                time.sleep(0.1)
+        )
+        self.__audio_stream.start()
+        self.__stream_active = True
+        logger.info("SoundDevice поток запущен")
 
-    def __run_main_loop(self):
+    def __stop_sounddevice_stream(self):
+        """Остановка SoundDevice потока"""
+        if not self.__stream_active:
+            return
+        logger.info("Остановка SoundDevice потока")
+        if self.__audio_stream:
+            self.__audio_stream.stop()
+            self.__audio_stream.close()
+            self.__audio_stream = None
+
+        self.__stream_active = False
+        logger.info("SoundDevice поток остановлен")
+
+    def __run_glib_main_loop(self):
         """Запуск GLib main loop"""
         try:
-            self.__main_loop.run()
+            self.__glib_main_loop.run()
         except Exception as e:
             logger.error(f"Ошибка в main loop: {e}")
 
+    def stop(self):
+        """Остановка сервиса"""
+        try:
+            if self.__running:
+                self.__running.set()
 
+            # Останавливаем аудиопотоки если они активны
+            if self.__stream_active:
+                if self.__backend == AudioBackends.GSTREAMER:
+                    self.__stop_gstreamer_stream()
+                elif self.__backend == AudioBackends.SOUNDDEVICE:
+                    self.__stop_sounddevice_stream()
+
+        except Exception as e:
+            logger.error(f"Ошибка при остановке: {e}")
+
+        logger.info("Сервис остановлен")
 
     def __callback_gstream(self, appsink):
         """Callback для GStreamer"""
@@ -324,8 +351,8 @@ class RealTimeASR:
         if message.type == Gst.MessageType.ERROR:
             err, debug = message.parse_error()
             logger.error(f"GStreamer ошибка: {err}")
-            if self.__main_loop:
-                self.__main_loop.quit()
+            if self.__glib_main_loop:
+                self.__glib_main_loop.quit()
 
     def __resample_audio_sounddevice(self, audio_data):
         """Ресэмплирование для SoundDevice"""
@@ -360,33 +387,48 @@ class RealTimeASR:
             logger.error(f"Ошибка настройки горячих клавиш: {e}")
 
     def __on_hotkey_press(self, *args, **kwargs):
-        """Обработка нажатия горячей клавиши"""
+        """Обработка нажатия горячей клавиши - НАЧИНАЕМ запись"""
         if not self.__manual_recording:
+            dispatcher.send(signal=Signal.set_status, status=Status.STARTED_RECORD)
             self.__manual_recording = True
             self.__manual_start_time = time.time()
             self.__speech_buffer = []
-            dispatcher.send(signal=Signal.set_status, status=Status.STARTED_RECORD)
-            logger.info(f"🎤 РУЧНАЯ ЗАПИСЬ НАЧАЛАСЬ (нажата {self.__hotkey})")
+
+            # ЗАПУСКАЕМ аудиопоток
+            try:
+                if self.__backend == AudioBackends.GSTREAMER:
+                    self.__start_gstreamer_stream()
+                elif self.__backend == AudioBackends.SOUNDDEVICE:
+                    self.__start_sounddevice_stream()
+                logger.info(f"🎤 ЗАПИСЬ НАЧАЛАСЬ (нажата {self.__hotkey}) - аудиопоток активирован")
+            except Exception as e:
+                logger.error(f"Ошибка запуска аудиопотока: {e}")
+                self.__manual_recording = False
 
     def __on_hotkey_release(self, *args, **kwargs):
-        """Обработка отпускания горячей клавиши"""
+        """Обработка отпускания горячей клавиши - ОСТАНАВЛИВАЕМ запись"""
         if self.__manual_recording:
+            dispatcher.send(signal=Signal.set_status, status=Status.PROCESSING_RECORD)
             self.__manual_recording = False
-            duration = (
-                time.time() - self.__manual_start_time
-                if self.__manual_start_time
-                else 0
-            )
-            logger.info(
-                f"🔇 РУЧНАЯ ЗАПИСЬ ОСТАНОВЛЕНА (отпущена {self.__hotkey}, длительность: {duration:.1f}с)"
-            )
+            duration = time.time() - self.__manual_start_time if self.__manual_start_time else 0
 
+            # ОСТАНАВЛИВАЕМ аудиопоток
+            try:
+                if self.__backend == AudioBackends.GSTREAMER:
+                    self.__stop_gstreamer_stream()
+                elif self.__backend == AudioBackends.SOUNDDEVICE:
+                    self.__stop_sounddevice_stream()
+                logger.info(f"🔇 ЗАПИСЬ ОСТАНОВЛЕНА (отпущена {self.__hotkey}, длительность: {duration:.1f}с) - аудиопоток деактивирован")
+            except Exception as e:
+                logger.error(f"Ошибка остановки аудиопотока: {e}")
+
+            # Запускаем распознавание если есть данные
             if len(self.__speech_buffer) > 0:
                 recognition_thread = threading.Thread(
-                    target=self.__process_speech_segment, daemon=True
+                    target=self.__process_speech_segment,
+                    daemon=True
                 )
                 recognition_thread.start()
-            dispatcher.send(signal=Signal.set_status, status=Status.PROCESSING_RECORD)
 
     def __process_speech_segment(self):
         """Обработка речевого сегмента"""
@@ -394,31 +436,26 @@ class RealTimeASR:
             logger.warning("Сегмент слишком короткий для распознавания")
             return
 
-        logger.info(
-            f"Распознаем речевой сегмент ({len(self.__speech_buffer) / self.__target_sample_rate:.1f}s)..."
-        )
+        logger.info(f"Распознаем речевой сегмент ({len(self.__speech_buffer) / self.__target_sample_rate:.1f}s)...")
 
         speech_array = np.array(self.__speech_buffer, dtype=np.float32)
-        text, language, confidence = self.__speech_recognizer.transcribe_audio(
-            speech_array
-        )
+        text, language, confidence = self.__speech_recognizer.transcribe_audio(speech_array)
 
         if text:
-            logger.info(
-                f"🎯 РАСПОЗНАНО [{language.upper()}, уверенность: {confidence:.2f}]:"
-            )
+            logger.info(f"🎯 РАСПОЗНАНО [{language.upper()}, уверенность: {confidence:.2f}]:")
             logger.info(f"{text}")
             self.__queue_recognised_text.put(text)
         else:
             logger.warning("Речь не распознана или содержит только шум\n")
-
         dispatcher.send(signal=Signal.set_status, status=Status.FINISHED_RECORD)
+
     def __process_audio(self):
         """Обработка аудио в отдельном потоке"""
-        logger.info("Процесс обработки аудио запущен...")
+        logger.info("Процесс обработки аудио запущен (в режиме ожидания)...")
 
         while not (self.__running and self.__running.is_set()):
             try:
+                # Ждем данные только когда идет запись
                 audio_chunk = self.__audio_queue.get(timeout=1.0)
 
                 # Ресэмплирование только для SoundDevice
@@ -428,18 +465,16 @@ class RealTimeASR:
                 self.__audio_buffer.extend(audio_chunk)
 
                 while len(self.__audio_buffer) >= 512:
-                    chunk_data = np.array(
-                        [self.__audio_buffer.popleft() for _ in range(512)]
-                    )
+                    chunk_data = np.array([self.__audio_buffer.popleft() for _ in range(512)])
 
+                    # Сохраняем данные только во время записи
                     if self.__manual_recording:
                         self.__speech_buffer.extend(chunk_data)
                         if len(self.__speech_buffer) > self.__max_speech_length:
-                            self.__speech_buffer = self.__speech_buffer[
-                                -self.__max_speech_length :
-                            ]
+                            self.__speech_buffer = self.__speech_buffer[-self.__max_speech_length:]
 
             except queue.Empty:
+                # Это нормально - просто нет данных (аудиопоток неактивен)
                 continue
             except Exception as e:
                 logger.error(f"Ошибка обработки: {e}")

@@ -152,7 +152,6 @@ class HotkeyHandlerClient(IHotkeyHandler):
                             logger.info(f"Received message: {msg}")
                         except (_pickle.UnpicklingError, EOFError, OSError):
                             logging.warning("Connection lost or corrupted data.")
-                            # dispatcher.send(signal=Signal.set_status, status=Status.ERROR)
                             raise
 
                         if isinstance(msg, dict) and 'response_to' in msg:
