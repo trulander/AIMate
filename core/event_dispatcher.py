@@ -1,7 +1,6 @@
 # from pydispatch import dispatcher
 import logging
 import traceback
-from collections import defaultdict
 from typing import Callable
 from domain.enums.signal import Signal
 import weakref

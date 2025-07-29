@@ -43,7 +43,7 @@ class MainWindow(tk.Tk):
         self.chat_listbox = tk.Listbox(main_frame)
         self.chat_listbox.place(relx=0.01, rely=0.02, relwidth=0.22, relheight=0.96)
         self.chat_listbox.bind("<<ListboxSelect>>", self.select_chat)
-
+        self.current_chat_id: int | None = None
         self.update_chat_listbox()
 
 
@@ -122,17 +122,18 @@ class MainWindow(tk.Tk):
         if not selection:
             return
         chat_name = self.chat_listbox.get(selection[0])
-        chat_text = f"{self.chat_sessions.get(chat_name, '')}\n\n"
-        self.create_editor(self.editor_frame, "editor", initial_text=chat_text, height=1)
+        self.current_chat_id = chat_name
 
+        chat_text = self.view_service.get_chat(chat_id=self.current_chat_id)
+        self.create_editor(self.editor_frame, "editor", initial_text=chat_text, height=1)
 
 
     def send_message(self):
         text = self.input_editor.get("1.0", tk.END).strip()
-        print("Отправка запроса:", text)
-        self.view_service.send_message(message=text)
-        # result = ai_model.generate(text)
-        # self.create_editor(self.editor_frame, "editor", initial_text=result, height=15)
+        logger.info(f"send_message Отправка запроса в чат id: {self.current_chat_id}, text: {text}")
+        result = self.view_service.send_message(message=text, chat_id=self.current_chat_id)
+        self.create_editor(self.editor_frame, "editor", initial_text=result, height=15)
+        self.update_chat_listbox()
 
 
     def show_screenshot(self):
@@ -178,7 +179,7 @@ class MainWindow(tk.Tk):
         self.tray_icon.run()
 
     def quit_window(self, icon=None, item=None):
-        self.main_menu.stop_speach_service()
+        self.view_service.orchestrator.stop_all()
         if self.tray_icon:
             self.tray_icon.stop()
         self.destroy()

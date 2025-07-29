@@ -2,22 +2,12 @@ import logging
 import sys
 import tkinter as tk
 from typing import TYPE_CHECKING
-
 from core.event_dispatcher import dispatcher
 from domain.enums.signal import Signal
 from domain.enums.status_statusbar import Status
 
 if TYPE_CHECKING:
     from presentation.main_window import MainWindow
-
-_debug = True
-_bgcolor = 'white'
-_fgcolor = 'black'
-_tabfg1 = 'black'
-_tabfg2 = 'white'
-_bgmode = 'light'
-_tabbg1 = '#d9d9d9'
-_tabbg2 = 'gray40'
 
 
 logger = logging.getLogger(__name__)
@@ -27,7 +17,7 @@ class MainMenu:
     def __init__(self, top:"MainWindow" =None):
         self.top = top
 
-        self.menubar = tk.Menu(top,font="TkMenuFont",bg='white',fg=_fgcolor)
+        self.menubar = tk.Menu(top,font="TkMenuFont",bg='white',fg='black')
         top.configure(menu = self.menubar)
 
         self.sub_menu = tk.Menu(self.menubar, activebackground='#d9d9d9'
@@ -58,17 +48,17 @@ class MainMenu:
         self.sub_menu1.add_command(command=self.pic_answer_question
                 ,compound='left', font="-family {Noto Sans} -size 10"
                 ,label='Ответить на вопрос на скриншете')
-        self.sub_menu12 = tk.Menu(self.menubar, activebackground='#d9d9d9'
+        self.sub_menu2 = tk.Menu(self.menubar, activebackground='#d9d9d9'
                 ,activeforeground='black', background='white'
                 ,disabledforeground='#bfbfbf', font="-family {Noto Sans} -size 10"
                 ,foreground='black', tearoff=0)
         self.menubar.add_cascade(compound='left'
                 ,font="-family {Noto Sans} -size 10", label='Распознавание голоса'
-                ,menu=self.sub_menu12, )
-        self.sub_menu12.add_command(command=self.start_speach_service
+                ,menu=self.sub_menu2, )
+        self.sub_menu2.add_command(command=self.start_speach_service
                 ,compound='left', font="-family {Noto Sans} -size 10"
                 ,label='Запустить агента транскрипции')
-        self.sub_menu12.add_command(command=self.stop_speach_service
+        self.sub_menu2.add_command(command=self.stop_speach_service
                 ,compound='left', font="-family {Noto Sans} -size 10"
                 ,label='Остановить агента транскрипции')
 
@@ -79,25 +69,22 @@ class MainMenu:
         self.top.minimize_to_tray()
 
     def pic_answer_question(self, *args):
-        if _debug:
-            print('test_support.pic_answer_question')
-            for arg in args:
-                print('    another arg:', arg)
-            sys.stdout.flush()
+        print('test_support.pic_answer_question')
+        for arg in args:
+            print('    another arg:', arg)
+        sys.stdout.flush()
 
     def pic_solve_problem(self, *args):
-        if _debug:
-            print('test_support.pic_solve_problem')
-            for arg in args:
-                print('    another arg:', arg)
-            sys.stdout.flush()
+        print('test_support.pic_solve_problem')
+        for arg in args:
+            print('    another arg:', arg)
+        sys.stdout.flush()
 
     def pic_to_text(self, *args):
-        if _debug:
-            print('test_support.pic_to_text')
-            for arg in args:
-                print('    another arg:', arg)
-            sys.stdout.flush()
+        print('test_support.pic_to_text')
+        for arg in args:
+            print('    another arg:', arg)
+        sys.stdout.flush()
 
     def start_speach_service(self, *args):
         logger.info('start_speach_service')
