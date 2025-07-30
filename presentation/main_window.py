@@ -657,7 +657,7 @@ class MainWindow(tk.Tk):
             for i in message:
                 if ContentMediaType.TEXT.value in i:
                     textmessage = i.get(ContentMediaType.TEXT.value, None)
-                elif ContentMediaType.IMAGE.value in i:
+                elif 'image_url' in i:
                     try:
                         media_data = i.get("image_url")
                         prefix = media_data[len("data:") :]
