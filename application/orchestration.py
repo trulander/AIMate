@@ -22,7 +22,7 @@ class Orchestration:
 
         self.__hot_key_handler_service = HotkeyService()
         self.__hot_key_handler_service.start()
-        self.__screenshot_service = ScreenshotService()
+        self.screenshot_service = ScreenshotService()
 
         self.__database: IDatabaseSession = SQLiteDatabaseSession()
         self.__repository: IRepositoryDBDict = RepositoryDBDict(database=self.__database)
@@ -52,7 +52,7 @@ class Orchestration:
         return self.__repository.get_list_chats()
 
 
-    def send_message(self, message: str, chat_id: str | int | None = None):
+    def send_message(self, message: list[dict[str, str]], chat_id: str | int | None = None):
         result = self.__ai_service.invoke(human_message=message)
         logger.info(f"send_message result: {result}")
         return result
@@ -63,12 +63,10 @@ class Orchestration:
         return result
 
 
-    def set_coords_area(self, coords: tuple):
-        logger.info(f"set coords area: {coords} were set")
-        self.coords = coords
+
 
     def get_screenshot(self, coords: tuple) -> np.ndarray:
-        result = self.__screenshot_service.take_screenshot(bbox=coords)
+        result = self.screenshot_service.take_screenshot(bbox=coords)
         return result
 
     def save_screenshot(self, frame):

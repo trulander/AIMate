@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import Toplevel
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from presentation.main_window import MainWindow
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class SelectionWindow(Toplevel):
-    def __init__(self, main_window: "MainWindow"):
+    def __init__(self, main_window: "MainWindow", call_cack_func: Callable = lambda : None):
         super().__init__(main_window)
         self.main_window = main_window
         self.title("Select Area")
@@ -23,6 +23,7 @@ class SelectionWindow(Toplevel):
         self.canvas.bind('<Button-1>', self.start_selection)
         self.canvas.bind('<B1-Motion>', self.update_selection)
         self.canvas.bind('<ButtonRelease-1>', self.end_selection)
+        self.callback = call_cack_func
 
 
     def start_selection(self, event):
@@ -50,6 +51,6 @@ class SelectionWindow(Toplevel):
             y1, y2 = min(self.start_y, curr_y), max(self.start_y, curr_y)
             self.start_x = None
             self.rect = None
-            self.main_window.receive_coordinates(x1, y1, x2, y2)
+            self.main_window.callback_for_receive_coordinates(x1=x1, y1=y1, x2=x2, y2=y2, callback=self.callback)
             # sleep(0.3)
             self.destroy()

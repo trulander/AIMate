@@ -1,13 +1,10 @@
 import logging
 from langchain_core.messages import SystemMessage
-from langgraph.checkpoint.memory import InMemorySaver
-
 from application.interfaces.Irepository_bd_dict import IRepositoryDBDict
-
 from core.ai.ai_agent import model_factory, LLMAgent
 from core.ai.db_dict import SQLAlchemyDBDict
-from debug_helper import debug_object
 from domain.enums.ai_model import AIModels
+from langchain_core.messages import HumanMessage
 
 
 logger = logging.getLogger(__name__)
@@ -38,12 +35,16 @@ class AIService:
         )
 
     def get_chat_messages(self):
-        debug_object
-        result = [f"{i.type}: {i.content}" for i in self._agent.checkpointer.get(config=self._agent._config).get('channel_values',{}).get('messages', [])]
+        result = [
+            {i.type: i.content}
+            for i in self._agent.checkpointer.get(config=self._agent._config)
+            .get("channel_values", {})
+            .get("messages", [])
+        ]
         return result
 
     def invoke(self,
-               human_message: str = "Продолжай",
+               human_message: list[dict[str, str]] = None
                ):
         try:
             response = self._agent.invoke(

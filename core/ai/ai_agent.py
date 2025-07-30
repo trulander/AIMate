@@ -1,12 +1,9 @@
 import logging
-import uuid
 from collections import defaultdict
-from typing import Sequence, Any, Optional, Type
-from langchain_core.callbacks import BaseCallbackHandler
+from typing import Sequence, Type
 from langchain_core.language_models import LanguageModelLike, BaseChatModel
 from langchain_core.messages import SystemMessage, trim_messages, RemoveMessage
 from langchain_core.messages.utils import count_tokens_approximately
-from langchain_core.outputs import LLMResult
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -15,7 +12,6 @@ from langgraph.errors import GraphRecursionError
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.prebuilt import create_react_agent
 from core.config.config import settings
-from debug_helper import debug_object
 from domain.enums.ai_model import AIModels
 
 
@@ -42,7 +38,7 @@ class LLMAgent:
                 state["messages"],
                 strategy="last",
                 token_counter=count_tokens_approximately,
-                max_tokens=100000,
+                max_tokens=200000,
                 start_on="human",
                 end_on=("human", "tool"),
                 include_system=True
@@ -56,8 +52,8 @@ class LLMAgent:
         self.checkpointer = InMemorySaver(factory=default_dict_factory)
         logger.info(f"init agent system_message: {system_message}")
         self._agent = create_react_agent(
-            prompt=system_message,
-            pre_model_hook=pre_model_hook,
+            # prompt=system_message,
+            # pre_model_hook=pre_model_hook,
             model=model,
             tools=tools,
             checkpointer=self.checkpointer
@@ -75,15 +71,14 @@ class LLMAgent:
 
     def invoke(
         self,
-        content: str,
+        content: list[dict[str, str]],
         attachments: list[str]|None=None,
         temperature: float=0.1
     ) -> str:
         """Отправляет сообщение в чат"""
         message: dict = {
             "role": "user",
-            "content": content,
-            **({"attachments": attachments} if attachments else {})
+            **content
         }
         try:
             logger.info(f"invoke {message}")
@@ -94,14 +89,12 @@ class LLMAgent:
                 },
                 config=self._config
             )
-            result
         except GraphRecursionError:
 
             logger.warning("⚠️ Достигнут лимит reasoning.")
         except Exception as e:
             logger.error(f"InvokeError: {e}")
             raise e
-        debug_object
-        result = [f"{i.type}: {i.content}" for i in result.get('messages', [])]
-        return result
+        result = [{i.type: i.content} for i in result.get('messages', [])]
+        return result[-2:]
 

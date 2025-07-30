@@ -69,22 +69,14 @@ class MainMenu:
         self.top.minimize_to_tray()
 
     def pic_answer_question(self, *args):
-        print('test_support.pic_answer_question')
-        for arg in args:
-            print('    another arg:', arg)
-        sys.stdout.flush()
+        self.top.mark_area()
 
     def pic_solve_problem(self, *args):
-        print('test_support.pic_solve_problem')
-        for arg in args:
-            print('    another arg:', arg)
-        sys.stdout.flush()
+        self.top.mark_area()
 
     def pic_to_text(self, *args):
-        print('test_support.pic_to_text')
-        for arg in args:
-            print('    another arg:', arg)
-        sys.stdout.flush()
+        self.top.mark_area(call_cack_func=self.top.view_service.get_screenshot)
+
 
     def start_speach_service(self, *args):
         logger.info('start_speach_service')
