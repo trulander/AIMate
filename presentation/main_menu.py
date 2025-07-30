@@ -75,7 +75,10 @@ class MainMenu:
         self.top.mark_area()
 
     def pic_to_text(self, *args):
-        self.top.mark_area(call_cack_func=self.top.view_service.get_screenshot)
+        self.top.mark_area()
+        frame = self.top.view_service.get_screenshot(coords=self.top.view_service.coords)
+        self.top.attach_image(image=frame)
+
 
 
     def start_speach_service(self, *args):

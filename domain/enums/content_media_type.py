@@ -2,9 +2,9 @@ from enum import Enum
 
 
 class ContentMediaType(Enum):
-    IMAGE = "image_url"
-    AUDIO = "audio_url"
-    VIDEO = "video_url"
+    IMAGE = "image"
+    AUDIO = "audio"
+    VIDEO = "video"
     UNKNOWN = "unknown"
     TEXT = "text"
     MEDIA = "media"

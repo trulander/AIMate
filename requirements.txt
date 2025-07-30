@@ -11,6 +11,8 @@ chlorophyll
 #PyGObject #для работы под linux лучше PyGObject он позволяет не захватывать микрофон монопольно на низком уровне
 pygobject-stubs
 
+#sudo apt install wl-clipboard, sudo apt install xclip нужно для работы вставки изображений из буфета обмена на linux в частности на wayland
+
 
 pygments
 

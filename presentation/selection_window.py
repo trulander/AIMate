@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class SelectionWindow(Toplevel):
-    def __init__(self, main_window: "MainWindow", call_cack_func: Callable = lambda : None):
+    def __init__(self, main_window: "MainWindow", call_cack_func: Callable = lambda *args,**kwargs: None):
         super().__init__(main_window)
         self.main_window = main_window
         self.title("Select Area")

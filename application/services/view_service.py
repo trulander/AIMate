@@ -18,7 +18,7 @@ class ViewService(object):
         record = self.orchestrator.get_ai_chat(chat_id=chat_id)
         return record
 
-    def send_message(self, message: dict, chat_id: str | int | None = None):
+    def send_message(self, message: list[dict[str, str]], chat_id: str | int | None = None):
         return self.orchestrator.send_message(message=message, chat_id=chat_id)
 
     def get_screenshot(self, coords: tuple) -> np.ndarray:

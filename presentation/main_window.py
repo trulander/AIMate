@@ -18,6 +18,10 @@ from presentation.status_bar import StatusBar
 import base64
 import io
 from tkinter import filedialog, messagebox
+from PIL import ImageGrab
+import tempfile
+import os
+
 
 
 logger = logging.getLogger(__name__)
@@ -82,6 +86,10 @@ class MainWindow(tk.Tk):
 
         self.create_editor(self.input_frame, "input_editor", initial_data="", height=1)
 
+        # Область для отображения прикрепленных файлов
+        self.attachments_frame = tk.Frame(self.right_frame, bg="white")
+        self.attachments_frame.pack(fill="x", padx=10, pady=(0, 5))
+
         # Кнопки для работы с файлами
         buttons_frame = tk.Frame(self.right_frame, bg="white")
         buttons_frame.pack(fill="x", padx=10, pady=(0, 5))
@@ -89,14 +97,14 @@ class MainWindow(tk.Tk):
         self.attach_button = tk.Button(buttons_frame, text="📎 Прикрепить файл", command=self.attach_file)
         self.attach_button.pack(side="left", padx=(0, 10))
 
+        self.clear_button = tk.Button(buttons_frame, text="🗑️ Очистить", command=self.clear_all_attachments)
+        self.clear_button.pack(side="left", padx=(0, 10))
+
         self.send_button = tk.Button(buttons_frame, text="Отправить", command=self.send_message)
         self.send_button.pack(side="right")
 
-        # Переменные для хранения прикрепленного медиафайла
-        self.attached_file_base64 = None
-        self.attached_file_name = None
-        self.attached_file_mime_type = None
-        self.attached_file_type = None  # 'image', 'audio', 'video'
+        # Переменные для хранения прикрепленных медиафайлов
+        self.attached_files = []  # Список файлов: [{'base64': ..., 'mime_type': ..., 'type': ..., 'name': ...}]
         self.status_bar = StatusBar(self)
 
     def run_app(self):
@@ -134,10 +142,17 @@ class MainWindow(tk.Tk):
 
         # Настройка стилей для сообщений
         if attr_name == "editor":
+            # # Привязываем обработчики для главного редактора (чат)
+            # editor.bind("<Button-3>", self.show_chat_context_menu)  # Правая кнопка мыши
             self.setup_message_styles(editor)
             # Если есть данные чата, заполняем по сообщениям
             if initial_data:
                 self.load_chat_messages(editor, initial_data)
+
+        if attr_name == "input_editor":
+            # Привязываем обработчики для вставки из буфера обмена
+            editor.bind("<Control-v>", self.paste_from_clipboard)
+            editor.bind("<Button-3>", self.show_context_menu)  # Правая кнопка мыши
 
         if not initial_data and current_text:
             # Восстанавливаем текст в поле ввода
@@ -253,7 +268,7 @@ class MainWindow(tk.Tk):
             logger.error(f"Ошибка при конвертации изображения: {e}")
             return None
 
-    def add_message_to_editor(self, editor, message: str, sender: str, media_data: list[dict] = None):
+    def add_message_to_editor(self, editor, message: str, sender: str, media_files: list = None):
         """Добавляет стилизованное сообщение в указанный редактор с поддержкой медиафайлов"""
         # Добавляем разделитель если чат не пустой
         current_content = editor.get("1.0", tk.END).strip()
@@ -274,9 +289,10 @@ class MainWindow(tk.Tk):
             # Переход на новую строку
             editor.insert("end-1c", "\n")
 
-            # Добавляем медиафайл если есть
-            if media_data:
-                self.add_media_to_editor(editor=editor, media_data=media_data, sender="user")
+            # Добавляем медиафайлы если есть
+            if media_files:
+                for media_data in media_files:
+                    self.add_media_to_editor(editor, media_data, "user")
 
             # Добавляем текстовое сообщение если есть
             if message:
@@ -295,9 +311,10 @@ class MainWindow(tk.Tk):
             # Переход на новую строку
             editor.insert("end-1c", "\n")
 
-            # Добавляем медиафайл если есть (хотя агент обычно не отправляет медиафайлы)
-            if media_data:
-                self.add_media_to_editor(editor, media_data, "agent")
+            # Добавляем медиафайлы если есть (хотя агент обычно не отправляет медиафайлы)
+            if media_files:
+                for media_data in media_files:
+                    self.add_media_to_editor(editor, media_data, "agent")
 
             # Добавляем текстовое сообщение
             if message:
@@ -309,48 +326,92 @@ class MainWindow(tk.Tk):
         # Прокручиваем к концу
         editor.see(tk.END)
 
-    def add_media_to_editor(self, editor, media_data: list[dict], sender: str):
+    def add_media_to_editor(self, editor, media_data: dict, sender: str):
         """Добавляет медиафайл в редактор"""
         # {"mime_type": mime_type, "base64": base64_data, "type": "image"}
-        if not media_data and not isinstance(media_data, list):
+        if not media_data:
             return
-        for media in media_data:
-            base64_data = media.get('base64', '')
-            mime_type = media.get('mime_type', '')
-            file_type: ContentMediaType = media.get('type', ContentMediaType.UNKNOWN)
 
-            media_start = editor.index("end-1c")
+        base64_data = media_data.get('base64', '')
+        mime_type = media_data.get('mime_type', '')
+        file_type: ContentMediaType = media_data.get('type', ContentMediaType.UNKNOWN)
 
-            if file_type == ContentMediaType.IMAGE:
-                # For images, show the actual image
-                photo_image = self.base64_to_image(base64_data)
-                if photo_image:
-                    # Сохраняем ссылку на изображение
-                    editor._images.append(photo_image)
+        media_start = editor.index("end-1c")
 
-                    # Вставляем изображение
-                    editor.image_create("end-1c", image=photo_image)
-                    editor.insert("end-1c", "\n")
-            elif file_type == ContentMediaType.AUDIO:
-                # For audio, show a placeholder with file info
-                icon = "🎵"
-                editor.insert("end-1c", f"{icon} Аудио: ({mime_type})\n")
-            elif file_type == ContentMediaType.VIDEO:
-                # For video, show a placeholder with file info
-                icon = "🎥"
-                editor.insert("end-1c", f"{icon} Видео: ({mime_type})\n")
-            else:
-                # For unknown files
-                icon = "📎"
-                editor.insert("end-1c", f"{icon} Файл: ({mime_type})\n")
+        if file_type == ContentMediaType.IMAGE:
+            # For images, show the actual image
+            photo_image = self.base64_to_image(base64_data)
+            if photo_image:
+                # Сохраняем ссылку на изображение
+                editor._images.append(photo_image)
 
-            media_end = editor.index("end-1c")
+                # Вставляем изображение
+                editor.image_create("end-1c", image=photo_image)
+                editor.insert("end-1c", "\n")
+        elif file_type == ContentMediaType.AUDIO:
+            # For audio, show a placeholder with file info
+            icon = "🎵"
+            audio_text = f"{icon} Аудио: ({mime_type}) [Нажмите для прикрепления]"
+            editor.insert("end-1c", audio_text + "\n")
 
-            # Применяем соответствующий стиль
-            if sender == "user":
-                editor.tag_add("user_image", media_start, media_end)
-            else:
-                editor.tag_add("agent_image", media_start, media_end)
+            # Создаем тег для клика по аудио
+            audio_tag = f"audio_{len(getattr(editor, '_audio_data', []))}"
+            if not hasattr(editor, '_audio_data'):
+                editor._audio_data = []
+            editor._audio_data.append(media_data.copy())
+
+            # Применяем тег к тексту аудио
+            line_start = f"{media_start} linestart"
+            line_end = f"{media_start} lineend"
+            editor.tag_add(audio_tag, line_start, line_end)
+            editor.tag_config(audio_tag, foreground="blue", underline=True)
+            editor.tag_bind(audio_tag, "<Button-1>",
+                          lambda e, data=media_data: self.attach_media_from_chat(data))
+        elif file_type == ContentMediaType.VIDEO:
+            # For video, show a placeholder with file info
+            icon = "🎥"
+            video_text = f"{icon} Видео: ({mime_type}) [Нажмите для прикрепления]"
+            editor.insert("end-1c", video_text + "\n")
+
+            # Создаем тег для клика по видео
+            video_tag = f"video_{len(getattr(editor, '_video_data', []))}"
+            if not hasattr(editor, '_video_data'):
+                editor._video_data = []
+            editor._video_data.append(media_data.copy())
+
+            # Применяем тег к тексту видео
+            line_start = f"{media_start} linestart"
+            line_end = f"{media_start} lineend"
+            editor.tag_add(video_tag, line_start, line_end)
+            editor.tag_config(video_tag, foreground="blue", underline=True)
+            editor.tag_bind(video_tag, "<Button-1>",
+                          lambda e, data=media_data: self.attach_media_from_chat(data))
+        else:
+            # For unknown files
+            icon = "📎"
+            file_text = f"{icon} Файл: ({mime_type}) [Нажмите для прикрепления]"
+            editor.insert("end-1c", file_text + "\n")
+
+            # Создаем кликабельный тег
+            file_tag = f"file_{len(getattr(editor, '_file_data', []))}"
+            if not hasattr(editor, '_file_data'):
+                editor._file_data = []
+            editor._file_data.append(media_data.copy())
+
+            line_start = f"{media_start} linestart"
+            line_end = f"{media_start} lineend"
+            editor.tag_add(file_tag, line_start, line_end)
+            editor.tag_config(file_tag, foreground="blue", underline=True)
+            editor.tag_bind(file_tag, "<Button-1>",
+                          lambda e, data=media_data: self.attach_media_from_chat(data))
+
+        media_end = editor.index("end-1c")
+
+        # Применяем соответствующий стиль
+        if sender == "user":
+            editor.tag_add("user_image", media_start, media_end)
+        else:
+            editor.tag_add("agent_image", media_start, media_end)
 
     def get_mime_type(self, file_path: str) -> tuple[str, ContentMediaType]:
         """Определяет MIME тип и категорию контента по расширению файла"""
@@ -362,6 +423,195 @@ class MainWindow(tk.Tk):
     def get_media_type_by_mime(self, mime_type: str) -> ContentMediaType:
         """Возвращает тип контента (изображение, аудио, видео) по MIME"""
         return MIME_TYPE_MAP.get(mime_type, ContentMediaType.UNKNOWN)
+
+    def attach_media_from_chat(self, media_data):
+        """Прикрепляет медиафайл из чата к новому сообщению"""
+        try:
+            # Создаем копию данных медиафайла
+            new_media = media_data.copy()
+
+            # Добавляем к прикрепленным файлам
+            self.attached_files.append(new_media)
+            self.update_attachments_display()
+
+            logger.info(f"Медиафайл из чата прикреплен: {new_media['name']}")
+
+        except Exception as e:
+            logger.error(f"Ошибка при прикреплении медиафайла из чата: {e}")
+            messagebox.showerror("Ошибка", f"Не удалось прикрепить файл: {e}")
+
+    def paste_from_clipboard(self, event=None):
+        """Обработчик вставки из буфера обмена"""
+        try:
+            # Пробуем получить изображение из буфера обмена
+
+
+            clipboard_image = ImageGrab.grabclipboard()
+            self.attach_image(image=clipboard_image)
+
+        except Exception as e:
+            logger.error(f"Ошибка при вставке из буфера обмена: {e}")
+            return None
+
+    def attach_image(self, image: Image.Image):
+        if image:
+            # Создаем временный файл для изображения
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+                image.save(tmp_file.name, "PNG")
+
+                # Читаем как base64
+                with open(tmp_file.name, "rb") as f:
+                    base64_data = base64.b64encode(f.read()).decode("utf-8")
+
+                # Удаляем временный файл
+                os.unlink(tmp_file.name)
+
+                # Добавляем к прикрепленным файлам
+                file_data = {
+                    "base64": base64_data,
+                    "mime_type": "image/png",
+                    "type": ContentMediaType.IMAGE,
+                    "name": f"clipboard_image_{len(self.attached_files) + 1}.png",
+                }
+                self.attached_files.append(file_data)
+                self.update_attachments_display()
+
+                logger.info("Изображение вставлено из буфера обмена")
+                return "break"  # Предотвращаем стандартную вставку
+        else:
+            # Если изображения нет, разрешаем стандартную вставку текста
+            return None
+
+    def show_chat_context_menu(self, event):
+        """Показывает контекстное меню для чата"""
+        try:
+            # Получаем позицию курсора в тексте
+            cursor_pos = self.editor.index(f"@{event.x},{event.y}")
+
+            # Проверяем, есть ли в этой позиции изображение
+            images_at_pos = self.editor.image_names()
+
+            context_menu = tk.Menu(self, tearoff=0)
+
+            # Если есть изображения, добавляем опции для работы с ними
+            if images_at_pos:
+                context_menu.add_command(label="Копировать изображение в буфер",
+                                       command=lambda: self.copy_image_to_clipboard(cursor_pos))
+                context_menu.add_command(label="Прикрепить это изображение",
+                                       command=lambda: self.attach_image_from_chat(cursor_pos))
+                context_menu.add_separator()
+
+            context_menu.add_command(label="Копировать текст", command=self.copy_selected_text)
+            context_menu.add_separator()
+            context_menu.add_command(label="Прикрепить файл", command=self.attach_file)
+
+            context_menu.tk_popup(event.x_root, event.y_root)
+        except Exception as e:
+            logger.error(f"Ошибка при показе контекстного меню чата: {e}")
+
+    def show_context_menu(self, event):
+        """Показывает контекстное меню для поля ввода"""
+        try:
+            context_menu = tk.Menu(self, tearoff=0)
+            context_menu.add_command(label="Вставить изображение из буфера", command=self.paste_from_clipboard)
+            context_menu.add_separator()
+            context_menu.add_command(label="Прикрепить файл", command=self.attach_file)
+            context_menu.add_command(label="Очистить вложения", command=self.clear_all_attachments)
+
+            context_menu.tk_popup(event.x_root, event.y_root)
+        except Exception as e:
+            logger.error(f"Ошибка при показе контекстного меню: {e}")
+
+    def copy_selected_text(self):
+        """Копирует выделенный текст в буфер обмена"""
+        try:
+            selected_text = self.editor.selection_get()
+            self.clipboard_clear()
+            self.clipboard_append(selected_text)
+        except tk.TclError:
+            # Нет выделенного текста
+            pass
+
+    def copy_image_to_clipboard(self, position):
+        """Копирует изображение из чата в буфер обмена"""
+        try:
+            # Находим изображение рядом с позицией курсора
+            for i, image_ref in enumerate(getattr(self.editor, '_images', [])):
+                # Пробуем найти соответствующее изображение в данных сообщений
+                # Это упрощенная реализация - в реальности нужно отслеживать связь между изображениями и их данными
+                logger.info(f"Попытка копирования изображения {i} в буфер обмена")
+
+        except Exception as e:
+            logger.error(f"Ошибка при копировании изображения: {e}")
+
+    def attach_image_from_chat(self, position):
+        """Прикрепляет изображение из чата к новому сообщению"""
+        try:
+            # Это упрощенная реализация
+            # В реальности нужно найти base64 данные изображения по позиции
+            logger.info("Функция прикрепления изображения из чата пока не реализована полностью")
+            messagebox.showinfo("Информация", "Функция в разработке. Пока используйте кнопку 'Прикрепить файл' или вставку из буфера обмена.")
+
+        except Exception as e:
+            logger.error(f"Ошибка при прикреплении изображения из чата: {e}")
+
+    def update_attachments_display(self):
+        """Обновляет отображение прикрепленных файлов"""
+        # Очищаем старые виджеты
+        for widget in self.attachments_frame.winfo_children():
+            widget.destroy()
+
+        if not self.attached_files:
+            return
+
+        # Создаем заголовок если есть файлы
+        header = tk.Label(self.attachments_frame, text="Прикрепленные файлы:",
+                         bg="white", font=("Arial", 9, "bold"))
+        header.pack(anchor="w", pady=(5, 2))
+
+        # Отображаем каждый файл
+        for i, file_data in enumerate(self.attached_files):
+            file_frame = tk.Frame(self.attachments_frame, bg="#F0F0F0", relief="solid", bd=1)
+            file_frame.pack(fill="x", pady=1, padx=5)
+
+            # Иконка в зависимости от типа
+            icon = "🖼️" if file_data['type'] == 'image' else "🎵" if file_data['type'] == 'audio' else "🎥" if file_data['type'] == 'video' else "📎"
+
+            # Информация о файле
+            info_text = f"{icon} {file_data['name']} ({file_data['mime_type']})"
+            file_label = tk.Label(file_frame, text=info_text, bg="#F0F0F0", anchor="w")
+            file_label.pack(side="left", fill="x", expand=True, padx=(5, 0), pady=2)
+
+            # Кнопка удаления
+            remove_btn = tk.Button(file_frame, text="❌", bg="#F0F0F0",
+                                 command=lambda idx=i: self.remove_attachment(idx),
+                                 font=("Arial", 8))
+            remove_btn.pack(side="right", padx=5, pady=1)
+
+            # Если это изображение, показываем превью
+            if file_data['type'] == 'image':
+                try:
+                    preview_image = self.base64_to_image(file_data['base64'], max_width=100, max_height=60)
+                    if preview_image:
+                        preview_label = tk.Label(file_frame, image=preview_image, bg="#F0F0F0")
+                        preview_label.image = preview_image  # Сохраняем ссылку
+                        preview_label.pack(side="right", padx=5, pady=2)
+                except Exception as e:
+                    logger.error(f"Ошибка создания превью: {e}")
+
+    def remove_attachment(self, index):
+        """Удаляет прикрепленный файл по индексу"""
+        if 0 <= index < len(self.attached_files):
+            removed_file = self.attached_files.pop(index)
+            logger.info(f"Удален прикрепленный файл: {removed_file['name']}")
+            self.update_attachments_display()
+
+    def clear_all_attachments(self):
+        """Очищает все прикрепленные файлы"""
+        self.attached_files.clear()
+        self.update_attachments_display()
+        logger.info("Все прикрепленные файлы очищены")
+
 
     def attach_file(self):
         """Прикрепляет медиафайл к сообщению"""
@@ -383,29 +633,21 @@ class MainWindow(tk.Tk):
 
                 # Читаем и конвертируем в base64
                 with open(file_path, "rb") as media_file:
-                    self.attached_file_base64 = base64.b64encode(media_file.read()).decode('utf-8')
-                    self.attached_file_name = file_path.split("/")[-1]  # Имя файла
-                    self.attached_file_mime_type = mime_type
-                    self.attached_file_type = file_type
+                    file_data = {
+                        'base64': base64.b64encode(media_file.read()).decode('utf-8'),
+                        'name': file_path.split("/")[-1],  # Имя файла
+                        'mime_type': mime_type,
+                        'type': file_type
+                    }
 
-                # Выбираем подходящую иконку
-                icon = "🖼️" if file_type == ContentMediaType.IMAGE else "🎵" if file_type == ContentMediaType.AUDIO else "🎥" if file_type == ContentMediaType.VIDEO else "📎"
+                self.attached_files.append(file_data)
+                self.update_attachments_display()
 
-                # Обновляем текст кнопки
-                self.attach_button.config(text=f"{icon} {self.attached_file_name}")
-                logger.info(f"Файл прикреплен: {self.attached_file_name} ({mime_type})")
+                logger.info(f"Файл прикреплен: {file_data['name']} ({mime_type})")
 
             except Exception as e:
                 logger.error(f"Ошибка при чтении файла: {e}")
                 messagebox.showerror("Ошибка", f"Не удалось загрузить файл: {e}")
-
-    def clear_attachment(self):
-        """Очищает прикрепленный медиафайл"""
-        self.attached_file_base64 = None
-        self.attached_file_name = None
-        self.attached_file_mime_type = None
-        self.attached_file_type = None
-        self.attach_button.config(text="📎 Прикрепить файл")
 
     def parse_history_message(self, message: list | str) -> tuple[str, list]:
         textmessage = None
@@ -417,7 +659,7 @@ class MainWindow(tk.Tk):
                     textmessage = i.get(ContentMediaType.TEXT.value, None)
                 elif ContentMediaType.IMAGE.value in i:
                     try:
-                        media_data = i.get(ContentMediaType.IMAGE.value)
+                        media_data = i.get("image_url")
                         prefix = media_data[len("data:") :]
                         mime_type, base64_data = prefix.split(";base64,", 1)
                         type = self.get_media_type_by_mime(mime_type=mime_type)
@@ -448,11 +690,11 @@ class MainWindow(tk.Tk):
         """Загружает список сообщений в редактор с правильной стилизацией"""
         for message_dict in messages_data:
             if "human" in message_dict:
-                message, media = self.parse_history_message(message=message_dict["human"])
-                self.add_message_to_editor(editor=editor, message=message, sender="user", media_data=media)
+                message, media_files = self.parse_history_message(message=message_dict["human"])
+                self.add_message_to_editor(editor=editor, message=message, sender="user", media_files=media_files)
             elif "ai" in message_dict:
-                message, media = self.parse_history_message(message=message_dict["ai"])
-                self.add_message_to_editor(editor=editor, message=message, sender="agent", media_data=media)
+                message, media_files = self.parse_history_message(message=message_dict["ai"])
+                self.add_message_to_editor(editor=editor, message=message, sender="agent", media_files=media_files)
 
     def change_language(self, event=None):
         logger.info(f"change_language: {event}")
@@ -476,25 +718,14 @@ class MainWindow(tk.Tk):
     def send_message(self):
         text = self.input_editor.get("1.0", tk.END).strip()
 
-        # Проверяем что есть либо текст либо медиафайл
-        if not text and not self.attached_file_base64:
+        # Проверяем что есть либо текст либо медиафайлы
+        if not text and not self.attached_files:
             return
 
-        logger.info(f"send_message Отправка запроса в чат id: {self.current_chat_id}, text: {text}, has_media: {bool(self.attached_file_base64)}")
+        logger.info(f"send_message Отправка запроса в чат id: {self.current_chat_id}, text: {text}, files_count: {len(self.attached_files)}")
 
-        # Подготавливаем данные медиафайла для отображения
-        media_data = None
-        if self.attached_file_base64:
-            media_data = [
-                {
-                    "base64": self.attached_file_base64,
-                    "mime_type": self.attached_file_mime_type,
-                    "type": self.attached_file_type,
-                }
-            ]
-
-        # Быстро добавляем сообщение пользователя с медиафайлом если есть
-        self.add_message_to_editor(editor=self.editor, message=text, sender="user", media_data=media_data)
+        # Быстро добавляем сообщение пользователя с медиафайлами если есть
+        self.add_message_to_editor(self.editor, text, "user", self.attached_files.copy())
 
         # Формируем данные для отправки в сервис в формате LangChain
         message_content = []
@@ -503,29 +734,29 @@ class MainWindow(tk.Tk):
         if text:
             message_content.append({"type": "text", "text": text})
 
-        # Добавляем медиафайл если есть
-        if self.attached_file_base64:
-            if self.attached_file_type == ContentMediaType.IMAGE:
+        # Добавляем медиафайлы если есть
+        for file_data in self.attached_files:
+            if file_data['type'] == ContentMediaType.IMAGE:
                 # Для изображений используем image_url формат
-                data_url = f"data:{self.attached_file_mime_type};base64,{self.attached_file_base64}"
+                image_url = f"data:{file_data['mime_type']};base64,{file_data['base64']}"
                 message_content.append({
                     "type": "image_url",
-                    "image_url": data_url
+                    "image_url": image_url
                 })
-            elif self.attached_file_type == ContentMediaType.AUDIO:
+            elif file_data['type'] == ContentMediaType.AUDIO:
                 # Для аудио используем аналогичный формат
                 message_content.append({
                     "type": "media",
-                    "data": self.attached_file_base64,
-                    "mime_type": self.attached_file_mime_type,
+                    "data": file_data['base64'],
+                    "mime_type": file_data['mime_type'],
                 })
-            elif self.attached_file_type == ContentMediaType.VIDEO:
+            elif file_data['type'] == ContentMediaType.VIDEO:
                 # Для видео используем аналогичный формат
                 message_content.append(
                     {
                         "type": "media",
-                        "data": self.attached_file_base64,
-                        "mime_type": self.attached_file_mime_type,
+                        "data": file_data['base64'],
+                        "mime_type": file_data['mime_type'],
                     }
                 )
 
@@ -549,7 +780,7 @@ class MainWindow(tk.Tk):
 
         # Очищаем поле ввода и сбрасываем прикрепленный медиафайл
         self.input_editor.delete("1.0", tk.END)
-        self.clear_attachment()
+        self.clear_all_attachments()
 
         self.update_chat_listbox()
 
@@ -558,12 +789,10 @@ class MainWindow(tk.Tk):
     def show_screenshot(self):
         self.mark_area()
         frame = self.view_service.get_screenshot(coords=self.view_service.__coords)
-        img_tk = ImageTk.PhotoImage(frame)
-        self.label.config(image=img_tk)
-        self.label.image = img_tk
+        self.attach_image(image=frame)
 
 
-    def mark_area(self, call_cack_func: Callable = None):
+    def mark_area(self, call_cack_func: Callable = lambda *args,**kwargs: None):
         if self.selection_window is None:
             self.selection_window = SelectionWindow(main_window=self, call_cack_func=call_cack_func)
         self.selection_window.wait_visibility()
