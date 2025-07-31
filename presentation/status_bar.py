@@ -42,20 +42,3 @@ class StatusBar:
 
     def set_status(self, status: Status):
         self.status_label.config(text=f"{status.icon} {status.text}")
-
-
-if __name__ == "__main__":
-    def change_language(self, event=None):
-        logger.info(f"change_language: {event}")
-        if event:
-            self.default_lexer = Lexers[event].value
-        out_text = self.editor.get("1.0", tk.END)
-        in_text = self.input_editor.get("1.0", tk.END)
-        self.create_editor(self.editor_frame, "editor", initial_text=out_text, height=1)
-        self.create_editor(self.input_frame, "input_editor", initial_text=in_text, height=1)
-
-    self = tk.Tk()
-    self.change_language = change_language
-    StatusBar(root=self)
-    self.mainloop()
-

@@ -45,7 +45,7 @@ class RepositoryDBDict(IRepositoryDBDict):
         with self.database.get_session() as session:
             #session.query(AIStateModel).with_entities(AIStateModel.id).all()
             #session.execute(select(AIStateModel.id)).scalars().all()
-            return session.execute(select(AIStateModel.id, AIStateModel.last_message)).all()
+            return session.execute(select(AIStateModel.id, AIStateModel.last_message).order_by(AIStateModel.id.desc())).all()
 
     def delete_chat(self, record_id: int):
         with self.database.get_session() as session:

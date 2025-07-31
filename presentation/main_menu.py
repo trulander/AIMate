@@ -75,9 +75,7 @@ class MainMenu:
         self.top.mark_area()
 
     def pic_to_text(self, *args):
-        self.top.mark_area()
-        frame = self.top.view_service.get_screenshot(coords=self.top.view_service.coords)
-        self.top.attach_image(image=frame)
+        self.top.pic_to_text()
 
 
 

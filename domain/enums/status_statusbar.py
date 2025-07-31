@@ -9,6 +9,7 @@ class Status(Enum):
     STARTED_RECORD = ("🎤", "Запись")
     PROCESSING_RECORD = ("🔇", "В процессе расшифровки")
     FINISHED_RECORD = ("🎯", "Распознано")
+    WAITING_AGENT_RESPONSE = ("🟡", "Ожидает ответ агента")
 
     def __init__(self, icon, text):
         self.icon = icon

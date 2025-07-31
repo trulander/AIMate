@@ -12,6 +12,7 @@ from domain.enums.content_media_type import (
     MIME_TYPE_MAP,
 )
 from domain.enums.lexers import Lexers
+from domain.enums.status_statusbar import Status
 from presentation.main_menu import MainMenu
 from presentation.selection_window import SelectionWindow
 from presentation.status_bar import StatusBar
@@ -21,7 +22,6 @@ from tkinter import filedialog, messagebox
 from PIL import ImageGrab
 import tempfile
 import os
-
 
 
 logger = logging.getLogger(__name__)
@@ -44,18 +44,32 @@ class MainWindow(tk.Tk):
         self.configure(highlightbackground="white")
         self.configure(highlightcolor="black")
 
+        self.init()
+        # init new chat
+        # self.create_new_chat()
+
+
+    def init(self):
         self.main_menu = MainMenu(self)
 
         # Основной контент
         main_frame = tk.Frame(self, bg="white")
         main_frame.pack(fill="both", expand=True)
 
-        self.editor = None
-        self.input_editor = None
-
         # === Левая панель: список чатов ===
-        self.chat_listbox = tk.Listbox(main_frame)
-        self.chat_listbox.place(relx=0.01, rely=0.02, relwidth=0.22, relheight=0.96)
+        self.left_frame = tk.Frame(main_frame, bg="white")
+        self.left_frame.place(relx=0.01, rely=0.02, relwidth=0.22, relheight=0.96)
+
+        self.new_chat_button = tk.Button(
+            self.left_frame,
+            text="Начать новый чат",
+            command=self.create_new_chat,
+            height=1,
+        )
+        self.new_chat_button.pack(fill="both", expand=False, padx=10, pady=(5, 5))
+
+        self.chat_listbox = tk.Listbox(self.left_frame)
+        self.chat_listbox.pack(fill="both", expand=True, padx=10, pady=(5, 5))
         self.chat_listbox.bind("<<ListboxSelect>>", self.select_chat)
         self.current_chat_id: int | None = None
         self.update_chat_listbox()
@@ -65,47 +79,66 @@ class MainWindow(tk.Tk):
         self.right_frame.place(relx=0.24, rely=0.02, relwidth=0.74, relheight=0.96)
 
         # Метка для AI-ответа
-        lbl = tk.Label(self.right_frame, text="Ответ AI агента:", bg="white", anchor="w")
+        lbl = tk.Label(
+            self.right_frame, text="Ответ AI агента:", bg="white", anchor="w"
+        )
         lbl.pack(anchor="nw", padx=10, pady=5)
 
         # Выбор языка
         self.default_lexer = Lexers.python.value
 
+        self.editor = None
+        self.input_editor = None
+
         # === Контейнеры для редакторов ===
         self.editor_frame = tk.Frame(self.right_frame, bg="white", height=1)
         self.editor_frame.pack(fill="both", expand=True, padx=10, pady=(5, 5))
 
-        self.create_editor(self.editor_frame, "editor", initial_data="", height=1)
+        self.__create_editor(self.editor_frame, "editor", initial_data="", height=1)
 
         # Метка и поле ввода пользователя
-        input_lbl = tk.Label(self.right_frame, text="Ваш запрос:", bg="white", anchor="w")
+        input_lbl = tk.Label(
+            self.right_frame, text="Ваш запрос:", bg="white", anchor="w"
+        )
         input_lbl.pack(anchor="nw", padx=10, pady=(10, 0))
 
         self.input_frame = tk.Frame(self.right_frame, bg="white", height=1)
         self.input_frame.pack(fill="x", padx=10, pady=(0, 5))
 
-        self.create_editor(self.input_frame, "input_editor", initial_data="", height=1)
-
-        # Область для отображения прикрепленных файлов
-        self.attachments_frame = tk.Frame(self.right_frame, bg="white")
-        self.attachments_frame.pack(fill="x", padx=10, pady=(0, 5))
+        self.__create_editor(self.input_frame, "input_editor", initial_data="", height=1)
 
         # Кнопки для работы с файлами
         buttons_frame = tk.Frame(self.right_frame, bg="white")
         buttons_frame.pack(fill="x", padx=10, pady=(0, 5))
 
-        self.attach_button = tk.Button(buttons_frame, text="📎 Прикрепить файл", command=self.attach_file)
+        self.attach_button = tk.Button(
+            buttons_frame, text="📎 Прикрепить файл", command=self.attach_file
+        )
         self.attach_button.pack(side="left", padx=(0, 10))
 
-        self.clear_button = tk.Button(buttons_frame, text="🗑️ Очистить", command=self.clear_all_attachments)
+        self.clear_button = tk.Button(
+            buttons_frame, text="🗑️ Очистить", command=self.clear_all_attachments
+        )
         self.clear_button.pack(side="left", padx=(0, 10))
 
-        self.send_button = tk.Button(buttons_frame, text="Отправить", command=self.send_message)
+        self.send_button = tk.Button(
+            buttons_frame, text="Отправить", command=self.send_message
+        )
         self.send_button.pack(side="right")
+
+        # Область для отображения прикрепленных файлов
+        self.attachments_frame = tk.Frame(self.right_frame, bg="white")
+        self.attachments_frame.pack(fill="x", padx=10, pady=(0, 5))
 
         # Переменные для хранения прикрепленных медиафайлов
         self.attached_files = []  # Список файлов: [{'base64': ..., 'mime_type': ..., 'type': ..., 'name': ...}]
         self.status_bar = StatusBar(self)
+
+
+
+    def create_new_chat(self):
+        self.__create_editor(self.editor_frame, "editor", initial_data="", height=1)
+        self.current_chat_id = self.view_service.create_new_chat()
 
     def run_app(self):
         self.mainloop()
@@ -116,7 +149,7 @@ class MainWindow(tk.Tk):
         for name in self.chat_sessions:
             self.chat_listbox.insert(tk.END, name)
 
-    def create_editor(self, container, attr_name, initial_data=None, height=10, expand: bool = True):
+    def __create_editor(self, container, attr_name, initial_data=None, height=10, expand: bool = True):
         # Удалить старый, если есть
         old = getattr(self, attr_name, None)
         if old:
@@ -144,24 +177,28 @@ class MainWindow(tk.Tk):
         if attr_name == "editor":
             # # Привязываем обработчики для главного редактора (чат)
             # editor.bind("<Button-3>", self.show_chat_context_menu)  # Правая кнопка мыши
-            self.setup_message_styles(editor)
+            self.__setup_message_styles(editor)
             # Если есть данные чата, заполняем по сообщениям
-            if initial_data:
-                self.load_chat_messages(editor, initial_data)
+            if initial_data is not None:
+                self.__load_chat_messages(editor, initial_data)
+            elif current_text:
+                # Восстанавливаем текст в поле ввода
+                if current_text.strip():
+                    editor.insert("1.0", current_text)
 
         if attr_name == "input_editor":
             # Привязываем обработчики для вставки из буфера обмена
             editor.bind("<Control-v>", self.paste_from_clipboard)
             editor.bind("<Button-3>", self.show_context_menu)  # Правая кнопка мыши
 
-        if not initial_data and current_text:
-            # Восстанавливаем текст в поле ввода
-            if current_text.strip():
-                editor.insert("1.0", current_text)
+            if initial_data is not None and current_text:
+                # Восстанавливаем текст в поле ввода
+                if current_text.strip():
+                    editor.insert("1.0", current_text)
 
         setattr(self, attr_name, editor)
 
-    def setup_message_styles(self, editor):
+    def __setup_message_styles(self, editor):
         """Настройка стилей для разных типов сообщений"""
         # Стиль для сообщений пользователя (справа, белый фон)
         editor.tag_config(
@@ -251,7 +288,7 @@ class MainWindow(tk.Tk):
             spacing3=5,
         )
 
-    def base64_to_image(self, base64_string, max_width=300, max_height=200):
+    def __base64_to_image(self, base64_string, max_width=300, max_height=200):
         """Конвертирует base64 строку в ImageTk.PhotoImage с ограничением размера"""
         try:
             # Декодируем base64
@@ -268,7 +305,7 @@ class MainWindow(tk.Tk):
             logger.error(f"Ошибка при конвертации изображения: {e}")
             return None
 
-    def add_message_to_editor(self, editor, message: str, sender: str, media_files: list = None):
+    def __add_message_to_editor(self, editor, message: str, sender: str, media_files: list = None):
         """Добавляет стилизованное сообщение в указанный редактор с поддержкой медиафайлов"""
         # Добавляем разделитель если чат не пустой
         current_content = editor.get("1.0", tk.END).strip()
@@ -292,7 +329,7 @@ class MainWindow(tk.Tk):
             # Добавляем медиафайлы если есть
             if media_files:
                 for media_data in media_files:
-                    self.add_media_to_editor(editor, media_data, "user")
+                    self.__add_media_to_editor(editor, media_data, "user")
 
             # Добавляем текстовое сообщение если есть
             if message:
@@ -314,7 +351,7 @@ class MainWindow(tk.Tk):
             # Добавляем медиафайлы если есть (хотя агент обычно не отправляет медиафайлы)
             if media_files:
                 for media_data in media_files:
-                    self.add_media_to_editor(editor, media_data, "agent")
+                    self.__add_media_to_editor(editor, media_data, "agent")
 
             # Добавляем текстовое сообщение
             if message:
@@ -326,7 +363,7 @@ class MainWindow(tk.Tk):
         # Прокручиваем к концу
         editor.see(tk.END)
 
-    def add_media_to_editor(self, editor, media_data: dict, sender: str):
+    def __add_media_to_editor(self, editor, media_data: dict, sender: str):
         """Добавляет медиафайл в редактор"""
         # {"mime_type": mime_type, "base64": base64_data, "type": "image"}
         if not media_data:
@@ -340,7 +377,7 @@ class MainWindow(tk.Tk):
 
         if file_type == ContentMediaType.IMAGE:
             # For images, show the actual image
-            photo_image = self.base64_to_image(base64_data)
+            photo_image = self.__base64_to_image(base64_data)
             if photo_image:
                 # Сохраняем ссылку на изображение
                 editor._images.append(photo_image)
@@ -413,14 +450,14 @@ class MainWindow(tk.Tk):
         else:
             editor.tag_add("agent_image", media_start, media_end)
 
-    def get_mime_type(self, file_path: str) -> tuple[str, ContentMediaType]:
+    def __get_mime_type(self, file_path: str) -> tuple[str, ContentMediaType]:
         """Определяет MIME тип и категорию контента по расширению файла"""
         extension = file_path.lower().rsplit(".", 1)[-1]
         return EXTENSION_MAP.get(
             extension, ("application/octet-stream", ContentMediaType.UNKNOWN)
         )
 
-    def get_media_type_by_mime(self, mime_type: str) -> ContentMediaType:
+    def __get_media_type_by_mime(self, mime_type: str) -> ContentMediaType:
         """Возвращает тип контента (изображение, аудио, видео) по MIME"""
         return MIME_TYPE_MAP.get(mime_type, ContentMediaType.UNKNOWN)
 
@@ -482,32 +519,6 @@ class MainWindow(tk.Tk):
             # Если изображения нет, разрешаем стандартную вставку текста
             return None
 
-    def show_chat_context_menu(self, event):
-        """Показывает контекстное меню для чата"""
-        try:
-            # Получаем позицию курсора в тексте
-            cursor_pos = self.editor.index(f"@{event.x},{event.y}")
-
-            # Проверяем, есть ли в этой позиции изображение
-            images_at_pos = self.editor.image_names()
-
-            context_menu = tk.Menu(self, tearoff=0)
-
-            # Если есть изображения, добавляем опции для работы с ними
-            if images_at_pos:
-                context_menu.add_command(label="Копировать изображение в буфер",
-                                       command=lambda: self.copy_image_to_clipboard(cursor_pos))
-                context_menu.add_command(label="Прикрепить это изображение",
-                                       command=lambda: self.attach_image_from_chat(cursor_pos))
-                context_menu.add_separator()
-
-            context_menu.add_command(label="Копировать текст", command=self.copy_selected_text)
-            context_menu.add_separator()
-            context_menu.add_command(label="Прикрепить файл", command=self.attach_file)
-
-            context_menu.tk_popup(event.x_root, event.y_root)
-        except Exception as e:
-            logger.error(f"Ошибка при показе контекстного меню чата: {e}")
 
     def show_context_menu(self, event):
         """Показывает контекстное меню для поля ввода"""
@@ -562,7 +573,12 @@ class MainWindow(tk.Tk):
             widget.destroy()
 
         if not self.attached_files:
+            # Если файлов нет, скрываем фрейм полностью
+            self.attachments_frame.pack_forget()
             return
+
+        # Если есть файлы, показываем фрейм
+        self.attachments_frame.pack(fill="x", padx=10, pady=(0, 5))
 
         # Создаем заголовок если есть файлы
         header = tk.Label(self.attachments_frame, text="Прикрепленные файлы:",
@@ -584,14 +600,14 @@ class MainWindow(tk.Tk):
 
             # Кнопка удаления
             remove_btn = tk.Button(file_frame, text="❌", bg="#F0F0F0",
-                                 command=lambda idx=i: self.remove_attachment(idx),
-                                 font=("Arial", 8))
+                                   command=lambda idx=i: self.remove_attachment_idx(idx),
+                                   font=("Arial", 8))
             remove_btn.pack(side="right", padx=5, pady=1)
 
             # Если это изображение, показываем превью
             if file_data['type'] == 'image':
                 try:
-                    preview_image = self.base64_to_image(file_data['base64'], max_width=100, max_height=60)
+                    preview_image = self.__base64_to_image(file_data['base64'], max_width=100, max_height=60)
                     if preview_image:
                         preview_label = tk.Label(file_frame, image=preview_image, bg="#F0F0F0")
                         preview_label.image = preview_image  # Сохраняем ссылку
@@ -599,7 +615,7 @@ class MainWindow(tk.Tk):
                 except Exception as e:
                     logger.error(f"Ошибка создания превью: {e}")
 
-    def remove_attachment(self, index):
+    def remove_attachment_idx(self, index):
         """Удаляет прикрепленный файл по индексу"""
         if 0 <= index < len(self.attached_files):
             removed_file = self.attached_files.pop(index)
@@ -629,7 +645,7 @@ class MainWindow(tk.Tk):
         if file_path:
             try:
                 # Определяем MIME тип
-                mime_type, file_type = self.get_mime_type(file_path)
+                mime_type, file_type = self.__get_mime_type(file_path)
 
                 # Читаем и конвертируем в base64
                 with open(file_path, "rb") as media_file:
@@ -649,7 +665,7 @@ class MainWindow(tk.Tk):
                 logger.error(f"Ошибка при чтении файла: {e}")
                 messagebox.showerror("Ошибка", f"Не удалось загрузить файл: {e}")
 
-    def parse_history_message(self, message: list | str) -> tuple[str, list]:
+    def __parse_history_message(self, message: list | str) -> tuple[str, list]:
         textmessage = None
         media = []
 
@@ -662,7 +678,7 @@ class MainWindow(tk.Tk):
                         media_data = i.get("image_url")
                         prefix = media_data[len("data:") :]
                         mime_type, base64_data = prefix.split(";base64,", 1)
-                        type = self.get_media_type_by_mime(mime_type=mime_type)
+                        type = self.__get_media_type_by_mime(mime_type=mime_type)
                     except ValueError:
                         raise ValueError("Invalid data URL format")
                     media.append(
@@ -677,7 +693,7 @@ class MainWindow(tk.Tk):
                     # }
                     mime_type = i.get("mime_type")
                     base64_data = i.get("data")
-                    type = self.get_media_type_by_mime(mime_type=mime_type)
+                    type = self.__get_media_type_by_mime(mime_type=mime_type)
                     media.append(
                         {"mime_type": mime_type, "base64": base64_data, "type": type}
                     )
@@ -686,23 +702,23 @@ class MainWindow(tk.Tk):
 
         return textmessage, media
 
-    def load_chat_messages(self, editor, messages_data):
+    def __load_chat_messages(self, editor, messages_data):
         """Загружает список сообщений в редактор с правильной стилизацией"""
         for message_dict in messages_data:
             if "human" in message_dict:
-                message, media_files = self.parse_history_message(message=message_dict["human"])
-                self.add_message_to_editor(editor=editor, message=message, sender="user", media_files=media_files)
+                message, media_files = self.__parse_history_message(message=message_dict["human"])
+                self.__add_message_to_editor(editor=editor, message=message, sender="user", media_files=media_files)
             elif "ai" in message_dict:
-                message, media_files = self.parse_history_message(message=message_dict["ai"])
-                self.add_message_to_editor(editor=editor, message=message, sender="agent", media_files=media_files)
+                message, media_files = self.__parse_history_message(message=message_dict["ai"])
+                self.__add_message_to_editor(editor=editor, message=message, sender="agent", media_files=media_files)
 
     def change_language(self, event=None):
         logger.info(f"change_language: {event}")
         if event:
             self.default_lexer = Lexers[event].value
         # Пересоздаем редакторы
-        self.create_editor(self.editor_frame, "editor", initial_data=None, height=1)
-        self.create_editor(self.input_frame, "input_editor", height=1)
+        self.__create_editor(self.editor_frame, "editor", initial_data=None, height=1)
+        self.__create_editor(self.input_frame, "input_editor", height=1)
 
     def select_chat(self, event=None):
         selection = self.chat_listbox.curselection()
@@ -713,7 +729,7 @@ class MainWindow(tk.Tk):
 
         # Получаем структурированные данные чата
         chat_data = self.view_service.get_chat(chat_id=self.current_chat_id)
-        self.create_editor(self.editor_frame, "editor", initial_data=chat_data, height=1)
+        self.__create_editor(self.editor_frame, "editor", initial_data=chat_data, height=1)
 
     def send_message(self):
         text = self.input_editor.get("1.0", tk.END).strip()
@@ -725,7 +741,7 @@ class MainWindow(tk.Tk):
         logger.info(f"send_message Отправка запроса в чат id: {self.current_chat_id}, text: {text}, files_count: {len(self.attached_files)}")
 
         # Быстро добавляем сообщение пользователя с медиафайлами если есть
-        self.add_message_to_editor(self.editor, text, "user", self.attached_files.copy())
+        self.__add_message_to_editor(self.editor, text, "user", self.attached_files.copy())
 
         # Формируем данные для отправки в сервис в формате LangChain
         message_content = []
@@ -760,35 +776,36 @@ class MainWindow(tk.Tk):
                     }
                 )
 
-        # Формируем окончательное сообщение
-        message_data = {
-            "content": message_content
-        }
+        self.view_service.send_message(
+            message=message_content,
+            callback=self.callback_appending_ai_message
+        )
 
-        # Получаем ответ от сервиса (теперь это list[dict])
-        result_data = self.view_service.send_message(message=message_data, chat_id=self.current_chat_id)
-
+    def callback_appending_ai_message(self, messages):
         # Добавляем новые сообщения из результата
-        for message_dict in result_data:
+        for message_dict in messages:
             if "human" in message_dict:
                 # Пропускаем, так как сообщение пользователя уже добавлено
                 continue
             elif "ai" in message_dict:
                 # Агент может вернуть медиафайл (хотя это редко)
                 agent_media = message_dict.get("media", None)
-                self.add_message_to_editor(self.editor, message_dict["ai"], "agent", agent_media)
+                self.__add_message_to_editor(
+                    self.editor, message_dict["ai"], "agent", agent_media
+                )
 
         # Очищаем поле ввода и сбрасываем прикрепленный медиафайл
         self.input_editor.delete("1.0", tk.END)
         self.clear_all_attachments()
-
         self.update_chat_listbox()
+        self.status_bar.set_status(status=Status.IDLE)
 
 
-
-    def show_screenshot(self):
+    def pic_to_text(self):
         self.mark_area()
-        frame = self.view_service.get_screenshot(coords=self.view_service.__coords)
+        frame = self.view_service.get_screenshot(
+            coords=self.view_service.coords
+        )
         self.attach_image(image=frame)
 
 

@@ -64,21 +64,15 @@ class LLMAgent:
             "recursion_limit": 100,
         }
 
-    def upload_file(self, file):
-        print(f"upload file {file} to LLM")
-        file_uploaded_id = self._model.upload_file(file).id_  # type: ignore
-        return file_uploaded_id
-
     def invoke(
         self,
         content: list[dict[str, str]],
-        attachments: list[str]|None=None,
         temperature: float=0.1
     ) -> str:
         """Отправляет сообщение в чат"""
         message: dict = {
             "role": "user",
-            **content
+            "content": content
         }
         try:
             logger.info(f"invoke {message}")

@@ -23,16 +23,19 @@ class AIService:
         self.repository = repository
 
         system_message = SystemMessage(content=system_prompt)
-        default_dict_factory, next_id_record = SQLAlchemyDBDict.db_dict_factory(
+        self.default_dict_factory, self.next_id_record = SQLAlchemyDBDict.db_dict_factory(
             record_id=chat_id, repository=self.repository
         )
         self._agent = LLMAgent(
-            default_dict_factory=default_dict_factory,
+            default_dict_factory=self.default_dict_factory,
             system_message=system_message,
             model=self.model,
             tools=[],
-            chat_id=next_id_record,
+            chat_id=self.next_id_record,
         )
+
+    def get_current_chat_id(self) -> int:
+        return self.next_id_record
 
     def get_chat_messages(self):
         result = [
@@ -49,7 +52,6 @@ class AIService:
         try:
             response = self._agent.invoke(
                 content=human_message,
-                attachments=None,
                 temperature=0.1
             )
             logger.info(f"Последнее сообщение: {response}")
