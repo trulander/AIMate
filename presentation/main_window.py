@@ -387,6 +387,8 @@ class MainWindow(tk.Tk):
         file_type: ContentMediaType = media_data.get('type', ContentMediaType.UNKNOWN)
 
         media_start = editor.index("end-1c")
+        line_start = f"{media_start} linestart"
+        line_end = f"{media_start} lineend"
 
         if file_type == ContentMediaType.IMAGE:
             # For images, show the actual image
@@ -398,6 +400,20 @@ class MainWindow(tk.Tk):
                 # Вставляем изображение
                 editor.image_create("end-1c", image=photo_image)
                 editor.insert("end-1c", "\n")
+
+                # Создаем тег для клика по аудио
+                image_tag = f"image_{len(getattr(editor, '_image_data', []))}"
+                if not hasattr(editor, "_image_data"):
+                    editor._image_data = []
+                editor._image_data.append(media_data.copy())
+
+                editor.tag_add(image_tag, line_start, line_end)
+                editor.tag_config(image_tag, foreground="blue", underline=True)
+                editor.tag_bind(
+                    image_tag,
+                    "<Button-1>",
+                    lambda e, data=media_data: self.attach_media_from_chat(data),
+                )
         elif file_type == ContentMediaType.AUDIO:
             # For audio, show a placeholder with file info
             icon = "🎵"
@@ -411,8 +427,6 @@ class MainWindow(tk.Tk):
             editor._audio_data.append(media_data.copy())
 
             # Применяем тег к тексту аудио
-            line_start = f"{media_start} linestart"
-            line_end = f"{media_start} lineend"
             editor.tag_add(audio_tag, line_start, line_end)
             editor.tag_config(audio_tag, foreground="blue", underline=True)
             editor.tag_bind(audio_tag, "<Button-1>",
@@ -430,8 +444,6 @@ class MainWindow(tk.Tk):
             editor._video_data.append(media_data.copy())
 
             # Применяем тег к тексту видео
-            line_start = f"{media_start} linestart"
-            line_end = f"{media_start} lineend"
             editor.tag_add(video_tag, line_start, line_end)
             editor.tag_config(video_tag, foreground="blue", underline=True)
             editor.tag_bind(video_tag, "<Button-1>",
@@ -448,8 +460,6 @@ class MainWindow(tk.Tk):
                 editor._file_data = []
             editor._file_data.append(media_data.copy())
 
-            line_start = f"{media_start} linestart"
-            line_end = f"{media_start} lineend"
             editor.tag_add(file_tag, line_start, line_end)
             editor.tag_config(file_tag, foreground="blue", underline=True)
             editor.tag_bind(file_tag, "<Button-1>", lambda e, data=media_data: self.attach_media_from_chat(data))
@@ -483,7 +493,7 @@ class MainWindow(tk.Tk):
             self.attached_files.append(new_media)
             self.update_attachments_display()
 
-            logger.info(f"Медиафайл из чата прикреплен: {new_media['name']}")
+            logger.info(f"Медиафайл из чата прикреплен: {new_media['mime_type']}")
 
         except Exception as e:
             logger.error(f"Ошибка при прикреплении медиафайла из чата: {e}")
@@ -617,10 +627,10 @@ class MainWindow(tk.Tk):
             file_frame.pack(fill="x", pady=1, padx=5)
 
             # Иконка в зависимости от типа
-            icon = "🖼️" if file_data['type'] == 'image' else "🎵" if file_data['type'] == 'audio' else "🎥" if file_data['type'] == 'video' else "📎"
+            icon = "🖼️" if file_data['type'] == ContentMediaType.IMAGE else "🎵" if file_data['type'] == ContentMediaType.AUDIO else "🎥" if file_data['type'] == ContentMediaType.VIDEO else "📎"
 
             # Информация о файле
-            info_text = f"{icon} {file_data['name']} ({file_data['mime_type']})"
+            info_text = f"{icon} file ({file_data['mime_type']})"
             file_label = tk.Label(file_frame, text=info_text, bg="#F0F0F0", anchor="w")
             file_label.pack(side="left", fill="x", expand=True, padx=(5, 0), pady=2)
 
@@ -631,7 +641,7 @@ class MainWindow(tk.Tk):
             remove_btn.pack(side="right", padx=5, pady=1)
 
             # Если это изображение, показываем превью
-            if file_data['type'] == 'image':
+            if file_data['type'] == ContentMediaType.IMAGE:
                 try:
                     preview_image = self.__base64_to_image(file_data['base64'], max_width=100, max_height=60)
                     if preview_image:
@@ -645,7 +655,7 @@ class MainWindow(tk.Tk):
         """Удаляет прикрепленный файл по индексу"""
         if 0 <= index < len(self.attached_files):
             removed_file = self.attached_files.pop(index)
-            logger.info(f"Удален прикрепленный файл: {removed_file['name']}")
+            logger.info(f"Удален прикрепленный файл: {removed_file['mime_type']}")
             self.update_attachments_display()
 
     def clear_all_attachments(self):
@@ -699,7 +709,7 @@ class MainWindow(tk.Tk):
             for i in message:
                 if ContentMediaType.TEXT.value in i:
                     textmessage = i.get(ContentMediaType.TEXT.value, None)
-                elif 'image_url' in i:
+                elif ContentMediaType.IMAGE_URL.value in i.get('type', ""):
                     try:
                         media_data = i.get("image_url")
                         prefix = media_data[len("data:") :]
@@ -711,7 +721,7 @@ class MainWindow(tk.Tk):
                         {"mime_type": mime_type, "base64": base64_data, "type": type}
                     )
 
-                elif ContentMediaType.MEDIA.value in i:
+                elif ContentMediaType.MEDIA.value in i.get('type', ""):
                     # {
                     #     "type": "media",
                     #     "data": encoded_audio,  # Use base64 string directly

@@ -8,6 +8,7 @@ class ContentMediaType(Enum):
     UNKNOWN = "unknown"
     TEXT = "text"
     MEDIA = "media"
+    IMAGE_URL = "image_url"
 
 
 class MimeType(Enum):

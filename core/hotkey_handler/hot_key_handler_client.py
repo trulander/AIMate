@@ -108,7 +108,7 @@ class HotkeyHandlerClient(IHotkeyHandler):
             subprocess.run(auth_cmd, env=env, cwd=project_root, check=True)
         except subprocess.CalledProcessError as e:
             print("Ошибка аутентификации через sudo:", e)
-            sys.exit(1)
+            # sys.exit(1)
 
         # Шаг 2: теперь можно запускать сервер в фоне
         cmd = ["sudo", "-A", python_venv_path, script]
