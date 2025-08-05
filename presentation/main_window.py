@@ -2,7 +2,7 @@ import tkinter as tk
 import logging
 from typing import Callable
 
-from PIL import Image, ImageTk
+from PIL import Image, ImageGrab
 import pystray
 from chlorophyll import CodeView
 from application.services.view_service import ViewService
@@ -20,9 +20,7 @@ from presentation.main_menu import MainMenu
 from presentation.selection_window import SelectionWindow
 from presentation.status_bar import StatusBar
 import base64
-import io
 from tkinter import filedialog, messagebox
-from PIL import ImageGrab
 import tempfile
 import os
 
@@ -301,23 +299,6 @@ class MainWindow(tk.Tk):
             spacing3=5,
         )
 
-    def __base64_to_image(self, base64_string, max_width=300, max_height=200):
-        """Конвертирует base64 строку в ImageTk.PhotoImage с ограничением размера"""
-        try:
-            # Декодируем base64
-            image_data = base64.b64decode(base64_string)
-            image = Image.open(io.BytesIO(image_data))
-
-            # Изменяем размер если изображение слишком большое
-            if image.width > max_width or image.height > max_height:
-                image.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
-
-            # Конвертируем в PhotoImage
-            return ImageTk.PhotoImage(image)
-        except Exception as e:
-            logger.error(f"Ошибка при конвертации изображения: {e}")
-            return None
-
     def __add_message_to_editor(self, editor, message: str, sender: str, media_files: list = None):
         """Добавляет стилизованное сообщение в указанный редактор с поддержкой медиафайлов"""
         # Добавляем разделитель если чат не пустой
@@ -392,7 +373,7 @@ class MainWindow(tk.Tk):
 
         if file_type == ContentMediaType.IMAGE:
             # For images, show the actual image
-            photo_image = self.__base64_to_image(base64_data)
+            photo_image = self.view_service.base64_to_image(base64_data)
             if photo_image:
                 # Сохраняем ссылку на изображение
                 editor._images.append(photo_image)
@@ -504,7 +485,6 @@ class MainWindow(tk.Tk):
         try:
             # Пробуем получить изображение из буфера обмена
 
-
             clipboard_image = ImageGrab.grabclipboard()
             self.attach_image(image=clipboard_image)
 
@@ -579,28 +559,6 @@ class MainWindow(tk.Tk):
             # Нет выделенного текста
             pass
 
-    def copy_image_to_clipboard(self, position):
-        """Копирует изображение из чата в буфер обмена"""
-        try:
-            # Находим изображение рядом с позицией курсора
-            for i, image_ref in enumerate(getattr(self.editor, '_images', [])):
-                # Пробуем найти соответствующее изображение в данных сообщений
-                # Это упрощенная реализация - в реальности нужно отслеживать связь между изображениями и их данными
-                logger.info(f"Попытка копирования изображения {i} в буфер обмена")
-
-        except Exception as e:
-            logger.error(f"Ошибка при копировании изображения: {e}")
-
-    def attach_image_from_chat(self, position):
-        """Прикрепляет изображение из чата к новому сообщению"""
-        try:
-            # Это упрощенная реализация
-            # В реальности нужно найти base64 данные изображения по позиции
-            logger.info("Функция прикрепления изображения из чата пока не реализована полностью")
-            messagebox.showinfo("Информация", "Функция в разработке. Пока используйте кнопку 'Прикрепить файл' или вставку из буфера обмена.")
-
-        except Exception as e:
-            logger.error(f"Ошибка при прикреплении изображения из чата: {e}")
 
     def update_attachments_display(self):
         """Обновляет отображение прикрепленных файлов"""
@@ -643,7 +601,7 @@ class MainWindow(tk.Tk):
             # Если это изображение, показываем превью
             if file_data['type'] == ContentMediaType.IMAGE:
                 try:
-                    preview_image = self.__base64_to_image(file_data['base64'], max_width=100, max_height=60)
+                    preview_image = self.view_service.base64_to_image(file_data['base64'], max_width=100, max_height=60)
                     if preview_image:
                         preview_label = tk.Label(file_frame, image=preview_image, bg="#F0F0F0")
                         preview_label.image = preview_image  # Сохраняем ссылку
@@ -722,11 +680,6 @@ class MainWindow(tk.Tk):
                     )
 
                 elif ContentMediaType.MEDIA.value in i.get('type', ""):
-                    # {
-                    #     "type": "media",
-                    #     "data": encoded_audio,  # Use base64 string directly
-                    #     "mime_type": audio_mime_type,
-                    # }
                     mime_type = i.get("mime_type")
                     base64_data = i.get("data")
                     type = self.__get_media_type_by_mime(mime_type=mime_type)

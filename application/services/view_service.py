@@ -1,12 +1,17 @@
+import base64
+import io
 import logging
 import threading
 from typing import Callable
 
 import numpy as np
+from PIL import Image, ImageTk
+
 from application.orchestration import Orchestration
 from core.event_dispatcher import dispatcher
 from domain.enums.signal import Signal
 from domain.enums.status_statusbar import Status
+
 
 logger = logging.getLogger(__name__)
 
@@ -64,3 +69,21 @@ class ViewService(object):
         buffer = self.orchestrator.asr_service.real_time_asr.stop_recording_audio()
         base64_wav_audio = self.orchestrator.asr_service.real_time_asr.convert_to_wav_base64(audio_array=buffer)
         return base64_wav_audio
+
+    def base64_to_image(self, base64_string, max_width=300, max_height=200):
+        """Конвертирует base64 строку в ImageTk.PhotoImage с ограничением размера"""
+        try:
+            # Декодируем base64
+            image_data = base64.b64decode(base64_string)
+            image = Image.open(io.BytesIO(image_data))
+
+            # Изменяем размер если изображение слишком большое
+            if image.width > max_width or image.height > max_height:
+                image.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+
+            # Конвертируем в PhotoImage
+            return ImageTk.PhotoImage(image)
+        except Exception as e:
+            logger.error(f"Ошибка при конвертации изображения: {e}")
+            return None
+
