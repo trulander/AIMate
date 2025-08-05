@@ -6,12 +6,15 @@ from PIL import Image, ImageTk
 import pystray
 from chlorophyll import CodeView
 from application.services.view_service import ViewService
+from core.event_dispatcher import dispatcher
 from domain.enums.content_media_type import (
     ContentMediaType,
     EXTENSION_MAP,
     MIME_TYPE_MAP,
+    MimeType,
 )
 from domain.enums.lexers import Lexers
+from domain.enums.signal import Signal
 from domain.enums.status_statusbar import Status
 from presentation.main_menu import MainMenu
 from presentation.selection_window import SelectionWindow
@@ -37,7 +40,7 @@ class MainWindow(tk.Tk):
         self.selection_rect = None
         self.start_position = None
         self.selection_window = None
-        self.tray_icon = None
+        self.tray_icon: pystray.Icon = None
         self.protocol('WM_DELETE_WINDOW', self.minimize_to_tray)
 
         self.configure(background="white")
@@ -121,9 +124,12 @@ class MainWindow(tk.Tk):
         )
         self.clear_button.pack(side="left", padx=(0, 10))
 
-        self.send_button = tk.Button(
-            buttons_frame, text="Отправить", command=self.send_message
-        )
+        self.record_audio_button = tk.Button(buttons_frame, text="🎤 Записать")
+        self.record_audio_button.bind("<ButtonPress-1>", self.__start_record_audio)  # Нажатие ЛКМ
+        self.record_audio_button.bind("<ButtonRelease-1>", self.__stop_record_audio)  # Отпускание ЛКМ
+        self.record_audio_button.pack(side="left")
+
+        self.send_button = tk.Button(buttons_frame, text="Отправить", command=self.send_message)
         self.send_button.pack(side="right")
 
         # Область для отображения прикрепленных файлов
@@ -134,6 +140,13 @@ class MainWindow(tk.Tk):
         self.attached_files = []  # Список файлов: [{'base64': ..., 'mime_type': ..., 'type': ..., 'name': ...}]
         self.status_bar = StatusBar(self)
 
+
+    def __start_record_audio(self, event):
+        self.view_service.start_record_audio()
+
+    def __stop_record_audio(self, event):
+        audio_wav_base64 = self.view_service.stop_record_audio()
+        self.attach_audio(audio_wav_base64=audio_wav_base64)
 
 
     def create_new_chat(self):
@@ -439,8 +452,7 @@ class MainWindow(tk.Tk):
             line_end = f"{media_start} lineend"
             editor.tag_add(file_tag, line_start, line_end)
             editor.tag_config(file_tag, foreground="blue", underline=True)
-            editor.tag_bind(file_tag, "<Button-1>",
-                          lambda e, data=media_data: self.attach_media_from_chat(data))
+            editor.tag_bind(file_tag, "<Button-1>", lambda e, data=media_data: self.attach_media_from_chat(data))
 
         media_end = editor.index("end-1c")
 
@@ -513,11 +525,25 @@ class MainWindow(tk.Tk):
                 self.attached_files.append(file_data)
                 self.update_attachments_display()
 
-                logger.info("Изображение вставлено из буфера обмена")
+                logger.info("Изображение прикреплено")
                 return "break"  # Предотвращаем стандартную вставку
         else:
             # Если изображения нет, разрешаем стандартную вставку текста
             return None
+
+    def attach_audio(self, audio_wav_base64: str):
+        # Добавляем к прикрепленным файлам
+        file_data = {
+            "base64": audio_wav_base64,
+            "mime_type": MimeType.WAV.value,
+            "type": ContentMediaType.AUDIO,
+            "name": f"clipboard_audio_{len(self.attached_files) + 1}.wav",
+        }
+        self.attached_files.append(file_data)
+        self.update_attachments_display()
+
+        logger.info("Аудио прикреплено")
+        return "break"  # Предотвращаем стандартную вставку
 
 
     def show_context_menu(self, event):
@@ -798,7 +824,7 @@ class MainWindow(tk.Tk):
         self.input_editor.delete("1.0", tk.END)
         self.clear_all_attachments()
         self.update_chat_listbox()
-        self.status_bar.set_status(status=Status.IDLE)
+        dispatcher.send(signal=Signal.set_status, status=Status.IDLE)
 
 
     def pic_to_text(self):
@@ -834,15 +860,25 @@ class MainWindow(tk.Tk):
         self.withdraw()
 
         # Используй PNG вместо ICO
-        image = Image.open("app.ico")
+        project_root = os.path.abspath("")
+        ico_url = os.path.join(project_root, "presentation", "static", "default.ico")
+        image = Image.open(ico_url)
 
         menu = pystray.Menu(
             pystray.MenuItem('Show', self.show_window),
-            pystray.MenuItem('Quit', self.quit_window)
+            pystray.MenuItem('Quit', self.quit_window),
+            pystray.MenuItem('Test', self.test)
         )
 
         self.tray_icon = pystray.Icon("AIMate", image, "AIMate", menu)
         self.tray_icon.run()
+
+    def test(self):
+        self.tray_icon.notify(message="test", title="test")
+
+        project_root = os.path.abspath("")
+        ico_url = os.path.join(project_root, "presentation", "static", "error.ico")
+        self.tray_icon.icon = Image.open(ico_url)
 
     def quit_window(self, icon=None, item=None):
         self.view_service.orchestrator.stop_all()

@@ -87,6 +87,9 @@ class HotkeyHandlerClient(IHotkeyHandler):
 
     def __start_hot_key_server(self):
         # Определим корень проекта как директорию этого скрипта
+        dispatcher.send(
+            signal=Signal.set_status, status=Status.WAITING_ROOT_AUTORIZATION
+        )
         project_root = os.path.abspath("")
 
         # Пути относительные к корню проекта
@@ -99,12 +102,20 @@ class HotkeyHandlerClient(IHotkeyHandler):
         env["SUDO_ASKPASS"] = askpass
         env["PYTHONPATH"] = project_root
 
-        cmd = ["sudo", "-A", python_venv_path, script]
-
+        # Шаг 1: явно запрашиваем пароль через sudo -v
+        auth_cmd = ["sudo", "-A", "-v"]
         try:
-            subprocess.Popen(cmd, env=env, cwd=project_root)  # Указываем cwd для надежности
+            subprocess.run(auth_cmd, env=env, cwd=project_root, check=True)
+        except subprocess.CalledProcessError as e:
+            print("Ошибка аутентификации через sudo:", e)
+            sys.exit(1)
+
+        # Шаг 2: теперь можно запускать сервер в фоне
+        cmd = ["sudo", "-A", python_venv_path, script]
+        try:
+            subprocess.Popen(cmd, env=env, cwd=project_root)
         except Exception as e:
-            print("Ошибка:", e)
+            print("Ошибка запуска сервера:", e)
             sys.exit(1)
 
     def _on_press(self, key: tuple):
@@ -125,7 +136,7 @@ class HotkeyHandlerClient(IHotkeyHandler):
                 logging.info(f"Trying to connect to {self.__address} (attempt {retries + 1})...")
                 self.__conn = Client(self.__address, authkey=self.__authkey)
                 logging.info("Connected to server.")
-                dispatcher.send(signal=Signal.set_status, status=Status.IDLE)
+                dispatcher.send(signal=Signal.set_status, status=Status.CONNECTED_HOTKEY_SERVER)
                 return
             except (ConnectionRefusedError, socket.error):
                 retries += 1

@@ -34,6 +34,18 @@ class ASRService:
 
         self.__queue_recognised_text = multiprocessing.Queue()
 
+        self.real_time_asr: RealTimeASR = RealTimeASR(
+            target_sample_rate=self.__target_sample_rate,
+            block_size=self.__block_size,
+            hotkey=self.__hotkey,
+            hot_key_handler_service=self.__hot_key_handler_service,
+            queue_recognised_text=self.__queue_recognised_text,
+            speech_recognizer=SpeechRecognizer(
+                model_size=self.__whisper_model,
+                language=self.__language
+            )
+        )
+
         atexit.register(self.stop)
 
 
@@ -74,20 +86,7 @@ class ASRService:
         logger.info(f"loop_calback остановлен")
 
     def __initial_speach_recognition_service(self):
-        # hot_key_handler_service = HotkeyService()
-        # hot_key_handler_service.run()
-        real_time_asr = RealTimeASR(
-            target_sample_rate=self.__target_sample_rate,
-            block_size=self.__block_size,
-            hotkey=self.__hotkey,
-            hot_key_handler_service=self.__hot_key_handler_service,
-            queue_recognised_text=self.__queue_recognised_text,
-            speech_recognizer=SpeechRecognizer(
-                model_size=self.__whisper_model,
-                language=self.__language
-            )
-        )
-        real_time_asr.start(
+        self.real_time_asr.start(
             stop_event=self.__stop_event_process_speach_recognition
         )
 

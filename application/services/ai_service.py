@@ -4,7 +4,6 @@ from application.interfaces.Irepository_bd_dict import IRepositoryDBDict
 from core.ai.ai_agent import model_factory, LLMAgent
 from core.ai.db_dict import SQLAlchemyDBDict
 from domain.enums.ai_model import AIModels
-from langchain_core.messages import HumanMessage
 
 
 logger = logging.getLogger(__name__)

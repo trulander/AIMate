@@ -56,3 +56,11 @@ class ViewService(object):
     def set_coords_area(self, coords: tuple):
         logger.info(f"set coords area: {coords} were set")
         self.coords = coords
+
+    def start_record_audio(self):
+        return self.orchestrator.asr_service.real_time_asr.start_recording_audio()
+
+    def stop_record_audio(self):
+        buffer = self.orchestrator.asr_service.real_time_asr.stop_recording_audio()
+        base64_wav_audio = self.orchestrator.asr_service.real_time_asr.convert_to_wav_base64(audio_array=buffer)
+        return base64_wav_audio

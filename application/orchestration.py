@@ -1,13 +1,10 @@
 import logging
 import numpy as np
-from application.interfaces.Idatabase_session import IDatabaseSession
 from application.interfaces.Irepository_bd_dict import IRepositoryDBDict
 from application.services.ai_service import AIService
 from application.services.asr_service import ASRService
 from application.services.screenshot_service import ScreenshotService
 from application.services.hot_key_service import HotkeyService
-from core.repository.repository_bd_dict import RepositoryDBDict
-from core.repository.sqlite_session import SQLiteDatabaseSession
 from domain.enums.ai_model import AIModels
 
 
@@ -15,15 +12,16 @@ logger = logging.getLogger(__name__)
 
 
 class Orchestration:
-    def __init__(self):
+    def __init__(self, repository: IRepositoryDBDict):
         logger.info("init orchestration")
+        self.__repository: IRepositoryDBDict = repository
 
+    def init_services(self):
         self.__screenshot_service = ScreenshotService()
         self.__hot_key_handler_service = HotkeyService()
         self.__hot_key_handler_service.start()
-        self.__database: IDatabaseSession = SQLiteDatabaseSession()
-        self.__repository: IRepositoryDBDict = RepositoryDBDict(database=self.__database)
-        self.__asr_service = ASRService(
+
+        self.asr_service = ASRService(
             whisper_model="medium",
             language="ru",
             target_sample_rate=16000,
@@ -31,6 +29,7 @@ class Orchestration:
             hotkey=['ctrl', 'alt'],
             hot_key_handler_service=self.__hot_key_handler_service,
         )
+        self.asr_service.start_speach_service()
         self.__ai_service: AIService = self.create_ai_agent()
 
     def create_ai_agent(self, chat_id: int | None = None) -> AIService:
@@ -62,10 +61,10 @@ class Orchestration:
         return result
 
     def start_speach_service(self):
-        self.__asr_service.start_speach_service()
+        self.asr_service.start_speach_service()
 
     def stop_speach_service(self):
-        self.__asr_service.stop()
+        self.asr_service.stop()
         self.__hot_key_handler_service.stop()
 
     def stop_all(self):

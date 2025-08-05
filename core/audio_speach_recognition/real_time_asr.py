@@ -1,9 +1,12 @@
+import base64
+import io
 import logging
 import multiprocessing
 import platform
 import queue
 import threading
 import time
+import wave
 from collections import deque
 from enum import Enum
 import numpy as np
@@ -100,7 +103,6 @@ class RealTimeASR:
         else:
             raise RuntimeError("Нет доступных audio backend'ов")
 
-        self.__setup_hotkeys()
 
     def __choose_backend(self, preferred_backend: AudioBackends) -> AudioBackends | None:
         """Выбор наиболее подходящего backend'а"""
@@ -205,6 +207,7 @@ class RealTimeASR:
 
     def start(self, stop_event):
         """Запуск сервиса (но не записи - она начнется по горячим клавишам)"""
+        self.__setup_hotkeys()
         self.__running = stop_event
 
         # Запускаем поток обработки аудио (он будет ждать данных)
@@ -388,6 +391,21 @@ class RealTimeASR:
 
     def __on_hotkey_press(self, *args, **kwargs):
         """Обработка нажатия горячей клавиши - НАЧИНАЕМ запись"""
+        self.start_recording_audio()
+
+    def __on_hotkey_release(self, *args, **kwargs):
+        """Обработка отпускания горячей клавиши - ОСТАНАВЛИВАЕМ запись"""
+        self.stop_recording_audio()
+
+        # Запускаем распознавание если есть данные
+        if len(self.__speech_buffer) > 0:
+            recognition_thread = threading.Thread(
+                target=self.__process_speech_segment,
+                daemon=True
+            )
+            recognition_thread.start()
+
+    def start_recording_audio(self):
         if not self.__manual_recording:
             dispatcher.send(signal=Signal.set_status, status=Status.STARTED_RECORD)
             self.__manual_recording = True
@@ -405,12 +423,15 @@ class RealTimeASR:
                 logger.error(f"Ошибка запуска аудиопотока: {e}")
                 self.__manual_recording = False
 
-    def __on_hotkey_release(self, *args, **kwargs):
-        """Обработка отпускания горячей клавиши - ОСТАНАВЛИВАЕМ запись"""
+    def stop_recording_audio(self):
         if self.__manual_recording:
             dispatcher.send(signal=Signal.set_status, status=Status.PROCESSING_RECORD)
             self.__manual_recording = False
-            duration = time.time() - self.__manual_start_time if self.__manual_start_time else 0
+            duration = (
+                time.time() - self.__manual_start_time
+                if self.__manual_start_time
+                else 0
+            )
 
             # ОСТАНАВЛИВАЕМ аудиопоток
             try:
@@ -418,17 +439,15 @@ class RealTimeASR:
                     self.__stop_gstreamer_stream()
                 elif self.__backend == AudioBackends.SOUNDDEVICE:
                     self.__stop_sounddevice_stream()
-                logger.info(f"🔇 ЗАПИСЬ ОСТАНОВЛЕНА (отпущена {self.__hotkey}, длительность: {duration:.1f}с) - аудиопоток деактивирован")
+                logger.info(
+                    f"🔇 ЗАПИСЬ ОСТАНОВЛЕНА (отпущена {self.__hotkey}, длительность: {duration:.1f}с) - аудиопоток деактивирован"
+                )
             except Exception as e:
                 logger.error(f"Ошибка остановки аудиопотока: {e}")
 
-            # Запускаем распознавание если есть данные
-            if len(self.__speech_buffer) > 0:
-                recognition_thread = threading.Thread(
-                    target=self.__process_speech_segment,
-                    daemon=True
-                )
-                recognition_thread.start()
+            dispatcher.send(signal=Signal.set_status, status=Status.FINISHED_RECORD)
+            return self.__speech_buffer
+
 
     def __process_speech_segment(self):
         """Обработка речевого сегмента"""
@@ -447,7 +466,7 @@ class RealTimeASR:
             self.__queue_recognised_text.put(text)
         else:
             logger.warning("Речь не распознана или содержит только шум\n")
-        dispatcher.send(signal=Signal.set_status, status=Status.FINISHED_RECORD)
+        dispatcher.send(signal=Signal.set_status, status=Status.FINISHED_RECOGNITION)
 
     def __process_audio(self):
         """Обработка аудио в отдельном потоке"""
@@ -480,6 +499,27 @@ class RealTimeASR:
                 logger.error(f"Ошибка обработки: {e}")
 
         logger.info("Процесс обработки аудио остановлен...")
+
+
+    def convert_to_wav_base64(self, audio_array) -> str:
+        """Конвертация numpy array в WAV и кодирование в base64"""
+        # Нормализуем и конвертируем в 16-bit PCM
+        audio_normalized = np.clip(audio_array, -1.0, 1.0)
+        audio_int16 = (audio_normalized * 32767).astype(np.int16)
+
+        # Создаем WAV файл в памяти
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wav_file:
+            wav_file.setnchannels(1)  # моно
+            wav_file.setsampwidth(2)  # 16-bit
+            wav_file.setframerate(self.__target_sample_rate)
+            wav_file.writeframes(audio_int16.tobytes())
+
+        # Кодируем в base64
+        buffer.seek(0)
+        audio_base64 = base64.b64encode(buffer.read()).decode("utf-8")
+        return audio_base64
+
 
     def __del__(self):
         """Деструктор"""
